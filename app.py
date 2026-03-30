@@ -30,7 +30,7 @@ def auto_train(df):
         X = df.drop(columns=[target]).select_dtypes(include=['int64','float64'])
     else:
         if len(numeric_cols) < 2:
-            return None, None, None, "Not enough numeric data"
+            return None, None, None, None
         target = numeric_cols[-1]
         X = df[numeric_cols[:-1]]
         y = df[target]
@@ -92,7 +92,7 @@ def gemma_ai(question, df_context=None):
     if question in ai_cache:
         return ai_cache[question]
 
-    for _ in range(2):
+    for _ in range(3):
         try:
             messages = [{"role":"system","content":"You are an expert AI analyzing datasets and explaining insights clearly."}]
 
@@ -109,11 +109,17 @@ def gemma_ai(question, df_context=None):
             res = requests.post(
                 "https://integrate.api.nvidia.com/v1/chat/completions",
                 headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
-                json={"model":"meta/llama3-70b-instruct","messages":messages,"temperature":0.5,"max_tokens":400},
-                timeout=10
+                json={
+                    "model":"meta/llama3-8b-instruct",
+                    "messages":messages,
+                    "temperature":0.5,
+                    "max_tokens":400
+                },
+                timeout=25
             )
 
             reply = res.json()["choices"][0]["message"]["content"]
+
             chat_memory.append({"user":question,"ai":reply})
             ai_cache[question] = reply
 
@@ -122,32 +128,33 @@ def gemma_ai(question, df_context=None):
         except:
             time.sleep(1)
 
-    return "AI busy"
+    return "AI is currently busy. Please try again."
 
-HTML = """
+HTML = """ 
 <!DOCTYPE html>
 <html>
 <head>
-<title>Burnout AI Ultimate</title>
+<title>Burnout AI Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
-body{font-family:sans-serif;background:#0f172a;color:white;margin:0}
-.container{width:90%;margin:auto;padding:20px}
-.card{background:#1e293b;padding:20px;border-radius:12px;margin:15px 0}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.kpi{padding:15px;border-radius:10px;text-align:center}
-.high{background:#dc2626}
-.medium{background:#f59e0b}
-.low{background:#16a34a}
-.avg{background:#2563eb}
-input,button{padding:10px;margin:5px;border:none;border-radius:8px}
-button{background:#3b82f6;color:white;cursor:pointer}
+body {font-family:'Inter';background:#0b1120;color:#e5e7eb;margin:0}
+.header {padding:20px;text-align:center;background:#111827;font-size:24px}
+.container {width:92%;margin:auto;padding:20px}
+.card {background:#111827;border-radius:12px;padding:20px;margin-bottom:20px;border:1px solid #1f2937}
+.grid {display:grid;grid-template-columns:repeat(4,1fr);gap:15px}
+.kpi {padding:20px;border-radius:10px;text-align:center}
+.kpi strong {display:block;font-size:22px}
+.high{background:#7f1d1d}.medium{background:#78350f}.low{background:#064e3b}.avg{background:#1e3a8a}
+input,button{padding:10px;border-radius:6px;border:none;margin:5px}
+input{background:#1f2937;color:white}
+button{background:#2563eb;color:white;cursor:pointer}
 table{width:100%}
-td,th{padding:10px;text-align:center}
-#chatbox{position:fixed;bottom:80px;right:20px;width:300px;height:400px;background:black;display:none;flex-direction:column}
+td,th{padding:10px;border-bottom:1px solid #1f2937;text-align:center}
+#chat-toggle{position:fixed;bottom:20px;right:20px;background:#2563eb;padding:14px;border-radius:50%;cursor:pointer}
+#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#111827;border-radius:10px;display:none;flex-direction:column;border:1px solid #1f2937}
 #chat-body{flex:1;overflow-y:auto;padding:10px}
-.msg{margin:5px;padding:8px;border-radius:8px}
-.user{background:#2563eb}
-.ai{background:#374151}
+.msg{margin:6px;padding:8px;border-radius:6px}
+.user{background:#1d4ed8}.ai{background:#374151}
 </style>
 
 <script>
@@ -163,7 +170,7 @@ let body=document.getElementById("chat-body");
 body.innerHTML+=`<div class='msg user'>${m}</div>`;
 let t=document.createElement("div");
 t.className="msg ai";
-t.innerHTML="⚡ Thinking...";
+t.innerHTML="Analyzing...";
 body.appendChild(t);
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
 .then(r=>r.json()).then(d=>{t.innerHTML=d.reply;body.scrollTop=body.scrollHeight});
@@ -173,29 +180,31 @@ i.value="";
 </head>
 
 <body>
+
+<div class="header">Burnout AI Analytics Dashboard</div>
+
 <div class="container">
-<h1>🔥 Burnout AI Ultimate</h1>
 
 <div class="card">
 <form method="POST" enctype="multipart/form-data">
 <input type="file" name="file">
-<button>Upload Dataset & Train</button>
+<button>Upload Dataset</button>
 </form>
 </div>
 
 {% if stats %}
 <div class="grid">
-<div class="kpi avg">Avg<br>{{stats.avg}}</div>
-<div class="kpi high">High<br>{{stats.high}}</div>
-<div class="kpi medium">Medium<br>{{stats.medium}}</div>
-<div class="kpi low">Low<br>{{stats.low}}</div>
+<div class="kpi avg">Average<strong>{{stats.avg}}</strong></div>
+<div class="kpi high">High<strong>{{stats.high}}</strong></div>
+<div class="kpi medium">Medium<strong>{{stats.medium}}</strong></div>
+<div class="kpi low">Low<strong>{{stats.low}}</strong></div>
 </div>
 {% endif %}
 
 {% if table %}
 <div class="card">
 <table>
-<tr><th>Preview</th></tr>
+<tr><th>Data Preview</th></tr>
 {% for r in table[:10] %}
 <tr><td>{{r}}</td></tr>
 {% endfor %}
@@ -203,23 +212,15 @@ i.value="";
 </div>
 {% endif %}
 
-{% if bar %}
-<div class="card"><img src="data:image/png;base64,{{bar}}"></div>
-{% endif %}
+{% if bar %}<div class="card"><img src="data:image/png;base64,{{bar}}"></div>{% endif %}
+{% if pie %}<div class="card"><img src="data:image/png;base64,{{pie}}"></div>{% endif %}
+{% if fi %}<div class="card"><img src="data:image/png;base64,{{fi}}"></div>{% endif %}
 
-{% if pie %}
-<div class="card"><img src="data:image/png;base64,{{pie}}"></div>
-{% endif %}
-
-{% if fi %}
-<div class="card"><img src="data:image/png;base64,{{fi}}"></div>
-{% endif %}
-
-<a href="/download"><button>Download</button></a>
+<a href="/download"><button>Download Report</button></a>
 
 </div>
 
-<div onclick="toggleChat()" style="position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:15px;border-radius:50%">💬</div>
+<div id="chat-toggle" onclick="toggleChat()">Chat</div>
 
 <div id="chatbox">
 <div id="chat-body"></div>
