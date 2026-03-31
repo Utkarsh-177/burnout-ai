@@ -3,7 +3,9 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-import requests, os, numpy as np
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import requests, os
 
 app = Flask(__name__)
 
@@ -21,18 +23,37 @@ def auto_train(df):
     if len(num.columns) < 2:
         return None, None, None, None
 
-    target = num.columns[-1]
-    X = num.iloc[:,:-1]
-    y = pd.qcut(num[target], q=3, labels=[0,1,2], duplicates='drop')
+    possible_targets = [c for c in df.columns if any(k in c for k in ["burnout","stress","target","label","output"])]
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+    if possible_targets:
+        target = possible_targets[0]
+        X = num.drop(columns=[target], errors='ignore')
+        y = df[target]
 
-    m = RandomForestClassifier(n_estimators=140)
-    m.fit(X_train, y_train)
+        if y.nunique() > 10:
+            y = pd.qcut(y, q=3, labels=[0,1,2], duplicates='drop')
 
-    acc = round(accuracy_score(y_test, m.predict(X_test))*100,2)
+        X = X.fillna(X.mean())
 
-    df["Burnout"] = [["Low","Medium","High"][int(i)] for i in m.predict(X)]
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        m = RandomForestClassifier(n_estimators=200, random_state=42)
+        m.fit(X_train, y_train)
+
+        acc = round(accuracy_score(y_test, m.predict(X_test))*100,2)
+        preds = m.predict(X)
+
+    else:
+        X = num.fillna(num.mean())
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        km = KMeans(n_clusters=3, random_state=42, n_init=10)
+        preds = km.fit_predict(X_scaled)
+
+        acc = 0
+
+    df["Burnout"] = [["Low","Medium","High"][int(i)] for i in preds]
 
     stats = {
         "avg": round(df["Burnout"].map({"Low":1,"Medium":2,"High":3}).mean(),2),
@@ -44,7 +65,7 @@ def auto_train(df):
         "accuracy": acc
     }
 
-    return df, m, list(X.columns), stats
+    return df, None, list(num.columns), stats
 
 def smart_ai(q, df):
     if df is None:
@@ -69,7 +90,7 @@ def smart_ai(q, df):
             return df["Burnout"].value_counts().to_string()
         if "high" in q:
             return f"{(df['Burnout']=='High').sum()} high burnout employees"
-        if "important" in q:
+        if "important" in q and model is not None:
             imp = pd.Series(model.feature_importances_, index=df.select_dtypes(include=['int64','float64']).columns[:-1])
             return imp.sort_values(ascending=False).to_string()
         if "recommend" in q:
@@ -123,7 +144,19 @@ HTML = """
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{margin:0;font-family:system-ui;background:#0b0f19;color:#e5e7eb;display:flex}
+body{
+margin:0;
+font-family:system-ui;
+background:#0b0f19;
+color:#e5e7eb;
+display:flex;
+animation:fadeIn 0.6s ease-in;
+}
+
+@keyframes fadeIn{
+from{opacity:0;transform:translateY(8px)}
+to{opacity:1;transform:translateY(0)}
+}
 
 .sidebar{
 width:250px;
@@ -131,13 +164,13 @@ background:#020617;
 padding:25px;
 height:100vh;
 position:fixed;
-border-right:1px solid #111827
+border-right:1px solid #111827;
 }
 
 .sidebar h2{
 font-size:18px;
 margin-bottom:20px;
-color:#9ca3af
+color:#9ca3af;
 }
 
 .sidebar button{
@@ -149,24 +182,25 @@ border:none;
 color:#e5e7eb;
 border-radius:8px;
 cursor:pointer;
-transition:0.2s
+transition:all 0.2s ease;
 }
 
 .sidebar button:hover{
-background:#1f2937
+background:#1f2937;
+transform:translateY(-2px);
 }
 
 .main{
 margin-left:270px;
 padding:30px;
-width:100%
+width:100%;
 }
 
 .grid{
 display:grid;
 grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
 gap:20px;
-margin-bottom:25px
+margin-bottom:25px;
 }
 
 .card{
@@ -174,13 +208,18 @@ background:#111827;
 padding:20px;
 border-radius:12px;
 text-align:center;
-box-shadow:0 4px 20px rgba(0,0,0,0.3)
+box-shadow:0 4px 20px rgba(0,0,0,0.25);
+transition:all 0.25s ease;
+}
+
+.card:hover{
+transform:translateY(-4px);
 }
 
 .layout{
 display:grid;
 grid-template-columns:2.5fr 1fr;
-gap:20px
+gap:20px;
 }
 
 input[type="file"]{
@@ -188,27 +227,31 @@ padding:10px;
 background:#020617;
 border:none;
 color:white;
-border-radius:6px
+border-radius:6px;
 }
 
 button{
 padding:10px 15px;
 border:none;
 border-radius:6px;
-cursor:pointer
+cursor:pointer;
 }
 
 table{
 width:100%;
 border-collapse:collapse;
 margin-top:15px;
-font-size:14px
+font-size:14px;
 }
 
 td,th{
 padding:10px;
 border-bottom:1px solid #1f2937;
-text-align:center
+text-align:center;
+}
+
+tr:hover{
+background:#1f2937;
 }
 
 .high{background:#3f1d1d}
@@ -222,7 +265,11 @@ background:#2563eb;
 padding:14px;
 border-radius:50%;
 cursor:pointer;
-box-shadow:0 0 20px rgba(37,99,235,0.5)
+transition:0.2s;
+}
+
+#chat:hover{
+transform:scale(1.05);
 }
 
 #chatbox{
@@ -235,20 +282,20 @@ background:#020617;
 display:none;
 flex-direction:column;
 border-radius:10px;
-border:1px solid #1f2937
+border:1px solid #1f2937;
 }
 
 #chat-body{
 flex:1;
 overflow:auto;
-padding:10px
+padding:10px;
 }
 
 .msg{
 margin:6px;
 padding:8px;
 border-radius:6px;
-font-size:13px
+font-size:13px;
 }
 
 .user{background:#2563eb}
@@ -261,7 +308,12 @@ background:#16a34a;
 border:none;
 color:white;
 width:100%;
-border-radius:8px
+border-radius:8px;
+transition:0.2s;
+}
+
+.download-btn:hover{
+background:#15803d;
 }
 </style>
 
@@ -360,7 +412,7 @@ datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
 
 <div>
 <h3>Insights</h3>
-<p>AI-driven burnout analytics with predictive modeling and workforce risk detection.</p>
+<p>Adaptive AI automatically switches between supervised and unsupervised learning based on dataset structure.</p>
 </div>
 
 </div>
