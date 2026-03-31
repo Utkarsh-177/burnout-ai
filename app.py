@@ -161,46 +161,201 @@ HTML = """
 <head>
 <title>Burnout AI Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-body{margin:0;font-family:system-ui;background:#0b0f19;color:#e5e7eb;display:flex}
-.sidebar{width:250px;background:#020617;padding:25px;height:100vh;position:fixed;border-right:1px solid #111827}
-.sidebar h2{font-size:18px;margin-bottom:20px;color:#9ca3af}
-.sidebar button{width:100%;margin:10px 0;padding:12px;background:#111827;border:none;color:#e5e7eb;border-radius:8px;cursor:pointer}
-.main{margin-left:270px;padding:30px;width:100%}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:20px}
-.card{background:#111827;padding:20px;border-radius:12px;text-align:center}
-.layout{display:grid;grid-template-columns:2.5fr 1fr;gap:20px}
-table{width:100%;border-collapse:collapse;margin-top:15px;font-size:14px}
-td,th{padding:10px;border-bottom:1px solid #1f2937;text-align:center}
+body{
+margin:0;
+font-family:system-ui;
+background:#0b0f19;
+color:#e5e7eb;
+display:flex;
+animation:fadeIn 0.6s ease-in;
+}
+
+@keyframes fadeIn{
+from{opacity:0;transform:translateY(10px)}
+to{opacity:1;transform:translateY(0)}
+}
+
+.sidebar{
+width:250px;
+background:#020617;
+padding:25px;
+height:100vh;
+position:fixed;
+border-right:1px solid #111827;
+}
+
+.sidebar h2{
+font-size:18px;
+margin-bottom:20px;
+color:#9ca3af;
+}
+
+.sidebar button{
+width:100%;
+margin:10px 0;
+padding:12px;
+background:#111827;
+border:none;
+color:#e5e7eb;
+border-radius:8px;
+cursor:pointer;
+transition:all 0.2s ease;
+}
+
+.sidebar button:hover{
+background:#1f2937;
+transform:translateY(-3px);
+}
+
+.main{
+margin-left:270px;
+padding:30px;
+width:100%;
+}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+gap:20px;
+margin-bottom:25px;
+}
+
+.card{
+background:#111827;
+padding:20px;
+border-radius:12px;
+text-align:center;
+box-shadow:0 4px 20px rgba(0,0,0,0.25);
+transition:all 0.25s ease;
+}
+
+.card:hover{
+transform:translateY(-5px);
+}
+
+.layout{
+display:grid;
+grid-template-columns:2.5fr 1fr;
+gap:20px;
+}
+
+input[type="file"]{
+padding:10px;
+background:#020617;
+border:none;
+color:white;
+border-radius:6px;
+}
+
+button{
+padding:10px 15px;
+border:none;
+border-radius:6px;
+cursor:pointer;
+transition:0.2s;
+}
+
+button:hover{
+transform:scale(1.05);
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:15px;
+font-size:14px;
+}
+
+td,th{
+padding:10px;
+border-bottom:1px solid #1f2937;
+text-align:center;
+}
+
+tr:hover{
+background:#1f2937;
+}
+
 .high{background:#3f1d1d}
 .medium{background:#3f2d1d}
-#chat{position:fixed;bottom:20px;right:20px;background:#2563eb;padding:14px;border-radius:50%;cursor:pointer}
-#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column}
-#chat-body{flex:1;overflow:auto;padding:10px}
-.msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
+
+#chat{
+position:fixed;
+bottom:20px;
+right:20px;
+background:#2563eb;
+padding:14px;
+border-radius:50%;
+cursor:pointer;
+transition:0.2s;
+}
+
+#chat:hover{
+transform:scale(1.1);
+}
+
+#chatbox{
+position:fixed;
+bottom:80px;
+right:20px;
+width:320px;
+height:420px;
+background:#020617;
+display:none;
+flex-direction:column;
+border-radius:10px;
+border:1px solid #1f2937;
+}
+
+#chat-body{
+flex:1;
+overflow:auto;
+padding:10px;
+}
+
+.msg{
+margin:6px;
+padding:8px;
+border-radius:6px;
+font-size:13px;
+}
+
 .user{background:#2563eb}
 .ai{background:#1f2937}
 </style>
+
 <script>
-function toggleChat(){document.getElementById("chatbox").style.display="flex"}
+function toggleChat(){
+document.getElementById("chatbox").style.display="flex"
+}
+
 function sendMessage(msg=null){
 let i=document.getElementById("chat_text")
 let m=msg||i.value.trim()
 if(!m)return
+
 document.getElementById("chatbox").style.display="flex"
+
 let b=document.getElementById("chat-body")
 b.innerHTML+=`<div class='msg user'>${m}</div>`
+
 let t=document.createElement("div")
 t.className="msg ai"
-t.innerHTML="Processing..."
+t.innerHTML="Thinking..."
 b.appendChild(t)
+
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
 .then(r=>r.json()).then(d=>{t.innerHTML=d.reply})
+
 if(i)i.value=""
 }
 </script>
 </head>
+
 <body>
+
 <div class="sidebar">
 <h2>Burnout AI</h2>
 <button onclick="sendMessage('summary')">Summary</button>
@@ -209,7 +364,9 @@ if(i)i.value=""
 <button onclick="sendMessage('recommend')">Recommendation</button>
 <a href="/download"><button>Download Report</button></a>
 </div>
+
 <div class="main">
+
 <div class="grid">
 <div class="card">Avg<br><strong>{{stats.avg if stats else '-'}}</strong></div>
 <div class="card">High<br><strong>{{stats.high if stats else '-'}}</strong></div>
@@ -218,35 +375,66 @@ if(i)i.value=""
 <div class="card">Rows<br><strong>{{stats.rows if stats else '-'}}</strong></div>
 <div class="card">Accuracy<br><strong>{{stats.accuracy if stats else '-'}}</strong></div>
 </div>
+
 <div class="layout">
+
 <div>
+
 <form method="POST" enctype="multipart/form-data">
 <input type="file" name="file">
 <button>Upload</button>
 </form>
+
 {% if table %}
+
 <table>
-<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
+<tr>
+{% for k in table[0].keys() %}
+<th>{{k}}</th>
+{% endfor %}
+</tr>
+
 {% for r in table[:50] %}
 <tr class="{% if r['Burnout']=='High' %}high{% elif r['Burnout']=='Medium' %}medium{% endif %}">
-{% for v in r.values() %}<td>{{v}}</td>{% endfor %}
+{% for v in r.values() %}
+<td>{{v}}</td>
+{% endfor %}
 </tr>
 {% endfor %}
 </table>
+
 <canvas id="c"></canvas>
+
 <script>
-new Chart(document.getElementById("c"),{type:'bar',data:{labels:["Low","Medium","High"],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}})
+new Chart(document.getElementById("c"),{
+type:'bar',
+data:{
+labels:["Low","Medium","High"],
+datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]
+}
+})
 </script>
+
 {% endif %}
+
 </div>
-<div><h3>Insights</h3><p>AI analyzes dataset automatically.</p></div>
+
+<div>
+<h3>Insights</h3>
+<p>AI-powered burnout detection with adaptive ML switching (supervised + unsupervised).</p>
 </div>
+
 </div>
+
+</div>
+
 <div id="chat" onclick="toggleChat()">Chat</div>
+
 <div id="chatbox">
 <div id="chat-body"></div>
-<input id="chat_text" onkeydown="if(event.key==='Enter'){sendMessage()}" placeholder="Ask...">
+<input id="chat_text" placeholder="Ask..." onkeydown="if(event.key==='Enter'){sendMessage()}">
 </div>
+
 </body>
 </html>
 """
@@ -256,16 +444,16 @@ def home():
     global last_df, model
     table = None
     stats = None
-    if request.method == "POST":
-        try:
+    try:
+        if request.method == "POST":
             file = request.files.get("file")
             if file:
                 df = pd.read_csv(file)
                 df, model, feature_cols, stats = auto_train(df)
                 last_df = df
                 table = df.to_dict(orient="records")
-        except:
-            pass
+    except:
+        pass
     return render_template_string(HTML, table=table, stats=stats)
 
 @app.route("/chat", methods=["POST"])
