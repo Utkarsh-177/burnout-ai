@@ -1,7 +1,6 @@
-flask
+Flask
 pandas
+numpy
 scikit-learn
-matplotlib
 requests
 gunicorn
-numpy
