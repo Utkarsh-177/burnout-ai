@@ -17,12 +17,18 @@ model = None
 
 def auto_train(df):
     df.columns = df.columns.str.lower()
+    df = df.loc[:, ~df.columns.duplicated()]
 
     for col in df.select_dtypes(include=['object']).columns:
-        df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+        try:
+            if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
+                df = df.drop(columns=[col])
+            else:
+                df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+        except:
+            df = df.drop(columns=[col])
 
     df = df.fillna(df.mean(numeric_only=True))
-
     num = df.select_dtypes(include=np.number)
 
     if len(num.columns) < 2:
@@ -40,21 +46,15 @@ def auto_train(df):
         X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
 
         global model
-        model = RandomForestClassifier(
-            n_estimators=300,
-            max_depth=10,
-            random_state=42
-        )
-
+        model = RandomForestClassifier(n_estimators=300, max_depth=10, random_state=42)
         model.fit(X_train,y_train)
-        preds = model.predict(X)
 
+        preds = model.predict(X)
         acc = round(accuracy_score(y_test, model.predict(X_test))*100,2)
 
     else:
         scaler = StandardScaler()
         X = scaler.fit_transform(num)
-
         km = KMeans(n_clusters=3, n_init=10)
         preds = km.fit_predict(X)
 
@@ -69,33 +69,61 @@ def auto_train(df):
 
     return df, model, stats
 
-def insights(df):
-    text = []
-    if (df["Burnout"]=="High").sum() > len(df)*0.4:
-        text.append("High burnout risk across dataset")
-    text.append("Balanced workload and rest is recommended")
-    return text
+def smart_answer(q, df):
+    q = q.lower()
+
+    try:
+        if "average" in q or "mean" in q:
+            return df.mean(numeric_only=True).to_string()
+
+        if "max" in q or "highest" in q:
+            return df.max(numeric_only=True).to_string()
+
+        if "min" in q or "lowest" in q:
+            return df.min(numeric_only=True).to_string()
+
+        if "correlation" in q:
+            return df.corr(numeric_only=True).to_string()
+
+        if "count" in q or "rows" in q:
+            return str(len(df))
+
+        if "columns" in q:
+            return ", ".join(df.columns)
+
+        if "burnout" in q:
+            return df["Burnout"].value_counts().to_string()
+
+    except:
+        return None
+
+    return None
 
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
 
+    local = smart_answer(q, df)
+
     if not API_KEY:
-        return "API key missing."
+        return local or "AI unavailable."
 
     try:
         summary = df.describe().to_string()
 
         prompt = f"""
-You are a data analyst.
+You are a professional data analyst.
 
-Dataset Summary:
+Dataset summary:
 {summary}
 
-User Question:
+User question:
 {q}
 
-Give short insights, not raw data.
+Computed answer:
+{local}
+
+Give a clear explanation in simple words. Do not dump raw tables.
 """
 
         res = requests.post(
@@ -108,38 +136,140 @@ Give short insights, not raw data.
                 "model": "meta/llama3-8b-instruct",
                 "messages":[{"role":"user","content":prompt}],
                 "max_tokens":200
-            }
+            },
+            timeout=20
         )
 
         return res.json()["choices"][0]["message"]["content"]
 
     except:
-        return "AI error"
+        return local or "AI error"
 
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Burnout AI Pro</title>
+<title>Burnout AI</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{margin:0;background:#0f172a;color:white;font-family:sans-serif}
-.container{max-width:1100px;margin:auto;padding:30px;text-align:center}
-.upload{border:2px dashed #3b82f6;padding:40px;border-radius:12px;margin-bottom:20px;cursor:pointer}
-.grid{display:flex;justify-content:center;gap:15px;margin:20px}
-.card{background:#020617;padding:15px;border-radius:10px;width:120px}
-table{width:100%;margin-top:20px;border-collapse:collapse}
-td,th{padding:10px;border-bottom:1px solid #333}
-#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:12px;border-radius:50%}
-#chatbox{position:fixed;bottom:80px;right:20px;width:300px;height:400px;background:#020617;display:none;flex-direction:column}
-#chat-body{flex:1;overflow:auto;padding:10px}
+body{
+margin:0;
+font-family:system-ui;
+background:#0f172a;
+color:#e2e8f0;
+}
+
+.wrapper{
+max-width:1100px;
+margin:auto;
+padding:30px;
+}
+
+.header{
+text-align:center;
+margin-bottom:20px;
+}
+
+.upload-box{
+width:100%;
+max-width:700px;
+margin:0 auto 30px auto;
+border:2px dashed #334155;
+padding:40px;
+text-align:center;
+border-radius:12px;
+cursor:pointer;
+}
+
+.stats{
+display:flex;
+justify-content:center;
+gap:20px;
+flex-wrap:wrap;
+margin-bottom:20px;
+}
+
+.card{
+background:#020617;
+padding:15px;
+border-radius:10px;
+width:140px;
+text-align:center;
+}
+
+.table-box{
+overflow:auto;
+border:1px solid #1e293b;
+border-radius:10px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+}
+
+td,th{
+padding:10px;
+border-bottom:1px solid #1e293b;
+text-align:center;
+}
+
+canvas{
+margin-top:20px;
+}
+
+#chat{
+position:fixed;
+bottom:20px;
+right:20px;
+background:#3b82f6;
+padding:14px;
+border-radius:50%;
+cursor:pointer;
+}
+
+#chatbox{
+position:fixed;
+bottom:80px;
+right:20px;
+width:320px;
+height:420px;
+background:#020617;
+display:none;
+flex-direction:column;
+border-radius:10px;
+border:1px solid #1e293b;
+}
+
+#chat-body{
+flex:1;
+overflow:auto;
+padding:10px;
+}
+
+.msg{
+margin:5px;
+padding:8px;
+border-radius:6px;
+}
+
+.user{background:#3b82f6}
+.ai{background:#1e293b}
+
+#chatbox input{
+border:none;
+padding:10px;
+background:#020617;
+color:white;
+border-top:1px solid #1e293b;
+}
 </style>
 
 <script>
 function toggleChat(){
 let c=document.getElementById("chatbox")
-c.style.display=c.style.display==="flex"?"none":"flex"
+c.style.display = c.style.display==="flex"?"none":"flex"
 }
 
 function sendMessage(){
@@ -148,12 +278,15 @@ let m=i.value.trim()
 if(!m)return
 
 let b=document.getElementById("chat-body")
-b.innerHTML+=`<div style='background:#3b82f6;padding:5px'>${m}</div>`
+b.innerHTML+=`<div class='msg user'>${m}</div>`
+
+let t=document.createElement("div")
+t.className="msg ai"
+t.innerHTML="Processing..."
+b.appendChild(t)
 
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
-.then(r=>r.json()).then(d=>{
-b.innerHTML+=`<div style='background:#1e293b;padding:5px'>${d.reply}</div>`
-})
+.then(r=>r.json()).then(d=>{t.innerHTML=d.reply})
 
 i.value=""
 }
@@ -162,19 +295,21 @@ i.value=""
 
 <body>
 
-<div class="container">
+<div class="wrapper">
 
-<h1>🔥 Burnout AI Pro</h1>
+<div class="header">
+<h1>Burnout AI Dashboard</h1>
+</div>
 
 <form method="POST" enctype="multipart/form-data">
-<label class="upload">
-Upload CSV
+<label class="upload-box">
+Upload CSV Dataset
 <input type="file" name="file" hidden onchange="this.form.submit()">
 </label>
 </form>
 
 {% if stats %}
-<div class="grid">
+<div class="stats">
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
@@ -183,12 +318,14 @@ Upload CSV
 {% endif %}
 
 {% if table %}
+<div class="table-box">
 <table>
 <tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
 {% for r in table[:20] %}
 <tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
 {% endfor %}
 </table>
+</div>
 
 <canvas id="chart"></canvas>
 
@@ -198,24 +335,15 @@ type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
 })
 </script>
-
-{% endif %}
-
-{% if insights %}
-<ul>
-{% for i in insights %}
-<li>{{i}}</li>
-{% endfor %}
-</ul>
 {% endif %}
 
 </div>
 
-<div id="chat" onclick="toggleChat()">💬</div>
+<div id="chat" onclick="toggleChat()">Chat</div>
 
 <div id="chatbox">
 <div id="chat-body"></div>
-<input id="chat_text" placeholder="Ask..." onkeydown="if(event.key==='Enter'){sendMessage()}">
+<input id="chat_text" placeholder="Ask about dataset" onkeydown="if(event.key==='Enter'){sendMessage()}">
 </div>
 
 </body>
@@ -227,7 +355,6 @@ def home():
     global last_df
     stats=None
     table=None
-    ins=None
 
     if request.method=="POST":
         file=request.files.get("file")
@@ -236,9 +363,8 @@ def home():
             df,_,stats=auto_train(df)
             last_df=df
             table=df.to_dict(orient="records")
-            ins=insights(df)
 
-    return render_template_string(HTML,stats=stats,table=table,insights=ins)
+    return render_template_string(HTML,stats=stats,table=table)
 
 @app.route("/chat",methods=["POST"])
 def chat():
