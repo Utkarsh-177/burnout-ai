@@ -2,7 +2,6 @@ from flask import Flask, request, render_template_string, jsonify
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.cluster import KMeans
@@ -32,11 +31,9 @@ def auto_train(df):
     num = df.select_dtypes(include=np.number)
 
     if len(num.columns) < 2:
-        return df, None, {"accuracy":0,"high":0,"medium":0,"low":0}
+        return df, None, {"high":0,"medium":0,"low":0}
 
     target_cols = [c for c in df.columns if any(x in c for x in ["target","label","burnout","stress","output"])]
-
-    acc = 0
 
     if target_cols:
         target = target_cols[0]
@@ -46,11 +43,10 @@ def auto_train(df):
         X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
 
         global model
-        model = RandomForestClassifier(n_estimators=300, max_depth=10, random_state=42)
+        model = RandomForestClassifier(n_estimators=200, random_state=42)
         model.fit(X_train,y_train)
 
         preds = model.predict(X)
-        acc = round(accuracy_score(y_test, model.predict(X_test))*100,2)
 
     else:
         scaler = StandardScaler()
@@ -63,8 +59,7 @@ def auto_train(df):
     stats = {
         "high": int((df["Burnout"]=="High").sum()),
         "medium": int((df["Burnout"]=="Medium").sum()),
-        "low": int((df["Burnout"]=="Low").sum()),
-        "accuracy": acc
+        "low": int((df["Burnout"]=="Low").sum())
     }
 
     return df, model, stats
@@ -76,10 +71,10 @@ def smart_answer(q, df):
         if "average" in q or "mean" in q:
             return df.mean(numeric_only=True).to_string()
 
-        if "max" in q or "highest" in q:
+        if "max" in q:
             return df.max(numeric_only=True).to_string()
 
-        if "min" in q or "lowest" in q:
+        if "min" in q:
             return df.min(numeric_only=True).to_string()
 
         if "correlation" in q:
@@ -106,13 +101,13 @@ def ai_chat(q, df):
     local = smart_answer(q, df)
 
     if not API_KEY:
-        return local or "AI unavailable."
+        return local or "API key missing."
 
     try:
         summary = df.describe().to_string()
 
         prompt = f"""
-You are a professional data analyst.
+You are a data analyst.
 
 Dataset summary:
 {summary}
@@ -123,7 +118,7 @@ User question:
 Computed answer:
 {local}
 
-Give a clear explanation in simple words. Do not dump raw tables.
+Explain clearly in simple words. No raw tables.
 """
 
         res = requests.post(
@@ -140,10 +135,15 @@ Give a clear explanation in simple words. Do not dump raw tables.
             timeout=20
         )
 
-        return res.json()["choices"][0]["message"]["content"]
+        data = res.json()
 
-    except:
-        return local or "AI error"
+        if "choices" not in data:
+            return str(data)
+
+        return data["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        return str(e)
 
 HTML = """
 <!DOCTYPE html>
@@ -160,20 +160,21 @@ background:#0f172a;
 color:#e2e8f0;
 }
 
-.wrapper{
+.container{
 max-width:1100px;
 margin:auto;
 padding:30px;
 }
 
-.header{
+h1{
 text-align:center;
 margin-bottom:20px;
 }
 
-.upload-box{
+.upload{
+display:block;
 width:100%;
-max-width:700px;
+max-width:600px;
 margin:0 auto 30px auto;
 border:2px dashed #334155;
 padding:40px;
@@ -187,7 +188,7 @@ display:flex;
 justify-content:center;
 gap:20px;
 flex-wrap:wrap;
-margin-bottom:20px;
+margin-bottom:30px;
 }
 
 .card{
@@ -199,9 +200,9 @@ text-align:center;
 }
 
 .table-box{
-overflow:auto;
 border:1px solid #1e293b;
 border-radius:10px;
+overflow:auto;
 }
 
 table{
@@ -213,10 +214,6 @@ td,th{
 padding:10px;
 border-bottom:1px solid #1e293b;
 text-align:center;
-}
-
-canvas{
-margin-top:20px;
 }
 
 #chat{
@@ -256,14 +253,6 @@ border-radius:6px;
 
 .user{background:#3b82f6}
 .ai{background:#1e293b}
-
-#chatbox input{
-border:none;
-padding:10px;
-background:#020617;
-color:white;
-border-top:1px solid #1e293b;
-}
 </style>
 
 <script>
@@ -295,14 +284,12 @@ i.value=""
 
 <body>
 
-<div class="wrapper">
+<div class="container">
 
-<div class="header">
 <h1>Burnout AI Dashboard</h1>
-</div>
 
 <form method="POST" enctype="multipart/form-data">
-<label class="upload-box">
+<label class="upload">
 Upload CSV Dataset
 <input type="file" name="file" hidden onchange="this.form.submit()">
 </label>
@@ -313,7 +300,6 @@ Upload CSV Dataset
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
-<div class="card">Accuracy<br>{{stats.accuracy}}</div>
 </div>
 {% endif %}
 
