@@ -1,10 +1,11 @@
 from flask import Flask, request, render_template_string, jsonify
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.cluster import KMeans
-from sklearn.ensemble import HistGradientBoostingClassifier
 import requests, os
 
 app = Flask(__name__)
@@ -16,12 +17,18 @@ model = None
 
 def auto_train(df):
     df.columns = df.columns.str.lower()
-    num = df.select_dtypes(include=['int64','float64'])
+
+    for col in df.select_dtypes(include=['object']).columns:
+        df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+
+    df = df.fillna(df.mean(numeric_only=True))
+
+    num = df.select_dtypes(include=np.number)
 
     if len(num.columns) < 2:
         return df, None, {"accuracy":0,"high":0,"medium":0,"low":0}
 
-    target_cols = [c for c in df.columns if "burnout" in c or "stress" in c]
+    target_cols = [c for c in df.columns if any(x in c for x in ["target","label","burnout","stress","output"])]
 
     acc = 0
 
@@ -30,22 +37,25 @@ def auto_train(df):
         X = num.drop(columns=[target], errors='ignore')
         y = df[target]
 
-        X = X.fillna(X.mean())
-
-        X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2)
+        X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
 
         global model
-        model = HistGradientBoostingClassifier()
-        model.fit(X_train,y_train)
+        model = RandomForestClassifier(
+            n_estimators=300,
+            max_depth=10,
+            random_state=42
+        )
 
-        acc = round(accuracy_score(y_test, model.predict(X_test))*100,2)
+        model.fit(X_train,y_train)
         preds = model.predict(X)
 
+        acc = round(accuracy_score(y_test, model.predict(X_test))*100,2)
+
     else:
-        X = num.fillna(num.mean())
         scaler = StandardScaler()
-        X = scaler.fit_transform(X)
-        km = KMeans(n_clusters=3,n_init=10)
+        X = scaler.fit_transform(num)
+
+        km = KMeans(n_clusters=3, n_init=10)
         preds = km.fit_predict(X)
 
     df["Burnout"] = ["Low" if i==0 else "Medium" if i==1 else "High" for i in preds]
@@ -59,21 +69,12 @@ def auto_train(df):
 
     return df, model, stats
 
-def generate_insights(df):
-    insights = []
-    high = (df["Burnout"]=="High").sum()
-    total = len(df)
-
-    if high > total * 0.4:
-        insights.append("High burnout risk detected in dataset")
-
-    corr = df.corr(numeric_only=True)
-
-    if not corr.empty:
-        insights.append("Strong correlations detected between features")
-
-    insights.append("Recommendation: balance workload and improve rest cycles")
-    return insights
+def insights(df):
+    text = []
+    if (df["Burnout"]=="High").sum() > len(df)*0.4:
+        text.append("High burnout risk across dataset")
+    text.append("Balanced workload and rest is recommended")
+    return text
 
 def ai_chat(q, df):
     if df is None:
@@ -83,7 +84,19 @@ def ai_chat(q, df):
         return "API key missing."
 
     try:
-        summary = df.head(20).to_string()
+        summary = df.describe().to_string()
+
+        prompt = f"""
+You are a data analyst.
+
+Dataset Summary:
+{summary}
+
+User Question:
+{q}
+
+Give short insights, not raw data.
+"""
 
         res = requests.post(
             "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -93,17 +106,12 @@ def ai_chat(q, df):
             },
             json={
                 "model": "meta/llama3-8b-instruct",
-                "messages": [
-                    {"role": "system", "content": "You are a professional data analyst AI. Analyze dataset and answer clearly."},
-                    {"role": "user", "content": f"Dataset:\n{summary}\n\nQuestion: {q}"}
-                ],
-                "max_tokens": 300
-            },
-            timeout=20
+                "messages":[{"role":"user","content":prompt}],
+                "max_tokens":200
+            }
         )
 
-        data = res.json()
-        return data.get("choices",[{}])[0].get("message",{}).get("content","No response")
+        return res.json()["choices"][0]["message"]["content"]
 
     except:
         return "AI error"
@@ -112,35 +120,26 @@ HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Burnout AI</title>
+<title>Burnout AI Pro</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
-.container{max-width:1100px;margin:auto;padding:25px}
-h1{font-size:28px;margin-bottom:20px}
-.upload{border:2px dashed #334155;padding:50px;text-align:center;border-radius:14px;margin-bottom:25px;cursor:pointer;background:#020617}
-.upload:hover{border-color:#3b82f6}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin-bottom:20px}
-.card{background:#020617;padding:18px;border-radius:12px;text-align:center;border:1px solid #1e293b}
-.table-container{background:#020617;border-radius:12px;overflow:auto;border:1px solid #1e293b}
-table{width:100%;border-collapse:collapse}
-th,td{padding:10px;text-align:center}
-th{color:#94a3b8}
-tr{border-bottom:1px solid #1e293b}
-tr:hover{background:#1e293b}
-#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
-#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b}
+body{margin:0;background:#0f172a;color:white;font-family:sans-serif}
+.container{max-width:1100px;margin:auto;padding:30px;text-align:center}
+.upload{border:2px dashed #3b82f6;padding:40px;border-radius:12px;margin-bottom:20px;cursor:pointer}
+.grid{display:flex;justify-content:center;gap:15px;margin:20px}
+.card{background:#020617;padding:15px;border-radius:10px;width:120px}
+table{width:100%;margin-top:20px;border-collapse:collapse}
+td,th{padding:10px;border-bottom:1px solid #333}
+#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:12px;border-radius:50%}
+#chatbox{position:fixed;bottom:80px;right:20px;width:300px;height:400px;background:#020617;display:none;flex-direction:column}
 #chat-body{flex:1;overflow:auto;padding:10px}
-.msg{margin:5px;padding:8px;border-radius:6px}
-.user{background:#3b82f6}
-.ai{background:#1e293b}
-#chatbox input{border:none;padding:10px;background:#020617;color:white;border-top:1px solid #1e293b}
 </style>
 
 <script>
 function toggleChat(){
 let c=document.getElementById("chatbox")
-c.style.display = c.style.display==="flex"?"none":"flex"
+c.style.display=c.style.display==="flex"?"none":"flex"
 }
 
 function sendMessage(){
@@ -149,15 +148,12 @@ let m=i.value.trim()
 if(!m)return
 
 let b=document.getElementById("chat-body")
-b.innerHTML+=`<div class='msg user'>${m}</div>`
-
-let t=document.createElement("div")
-t.className="msg ai"
-t.innerHTML="Thinking..."
-b.appendChild(t)
+b.innerHTML+=`<div style='background:#3b82f6;padding:5px'>${m}</div>`
 
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
-.then(r=>r.json()).then(d=>{t.innerHTML=d.reply})
+.then(r=>r.json()).then(d=>{
+b.innerHTML+=`<div style='background:#1e293b;padding:5px'>${d.reply}</div>`
+})
 
 i.value=""
 }
@@ -168,11 +164,11 @@ i.value=""
 
 <div class="container">
 
-<h1>🔥 Burnout AI Dashboard</h1>
+<h1>🔥 Burnout AI Pro</h1>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
-📂 Upload dataset (CSV)
+Upload CSV
 <input type="file" name="file" hidden onchange="this.form.submit()">
 </label>
 </form>
@@ -187,27 +183,25 @@ i.value=""
 {% endif %}
 
 {% if table %}
-<div class="table-container">
 <table>
-<tr>
-{% for k in table[0].keys() %}
-<th>{{k}}</th>
-{% endfor %}
-</tr>
-
-{% for r in table[:30] %}
-<tr>
-{% for v in r.values() %}
-<td>{{v}}</td>
-{% endfor %}
-</tr>
+<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
+{% for r in table[:20] %}
+<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
 {% endfor %}
 </table>
-</div>
+
+<canvas id="chart"></canvas>
+
+<script>
+new Chart(document.getElementById('chart'),{
+type:'bar',
+data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
+})
+</script>
+
 {% endif %}
 
 {% if insights %}
-<h3 style="margin-top:20px;">Insights</h3>
 <ul>
 {% for i in insights %}
 <li>{{i}}</li>
@@ -221,35 +215,34 @@ i.value=""
 
 <div id="chatbox">
 <div id="chat-body"></div>
-<input id="chat_text" placeholder="Ask about dataset..." onkeydown="if(event.key==='Enter'){sendMessage()}">
+<input id="chat_text" placeholder="Ask..." onkeydown="if(event.key==='Enter'){sendMessage()}">
 </div>
 
 </body>
 </html>
 """
 
-@app.route("/", methods=["GET","POST"])
+@app.route("/",methods=["GET","POST"])
 def home():
     global last_df
-    stats = None
-    insights = None
-    table = None
+    stats=None
+    table=None
+    ins=None
 
     if request.method=="POST":
-        file = request.files.get("file")
+        file=request.files.get("file")
         if file:
-            df = pd.read_csv(file)
-            df, _, stats = auto_train(df)
-            last_df = df
-            insights = generate_insights(df)
-            table = df.to_dict(orient="records")
+            df=pd.read_csv(file)
+            df,_,stats=auto_train(df)
+            last_df=df
+            table=df.to_dict(orient="records")
+            ins=insights(df)
 
-    return render_template_string(HTML, stats=stats, insights=insights, table=table)
+    return render_template_string(HTML,stats=stats,table=table,insights=ins)
 
-@app.route("/chat", methods=["POST"])
+@app.route("/chat",methods=["POST"])
 def chat():
-    msg = request.get_json()["message"]
-    return jsonify({"reply": ai_chat(msg, last_df)})
+    return jsonify({"reply":ai_chat(request.get_json()["message"],last_df)})
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+if __name__=="__main__":
+    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
