@@ -5,9 +5,11 @@ from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.ensemble import HistGradientBoostingClassifier
-import os
+import requests, os
 
 app = Flask(__name__)
+
+API_KEY = os.getenv("API_KEY")
 
 last_df = None
 model = None
@@ -75,69 +77,88 @@ def generate_insights(df):
 
 def ai_chat(q, df):
     if df is None:
-        return "Upload dataset first"
+        return "Upload dataset first."
 
-    q = q.lower()
+    if not API_KEY:
+        return "API key missing."
 
     try:
-        if "summary" in q:
-            return df.describe(include='all').to_string()
+        summary = df.head(20).to_string()
 
-        elif "columns" in q:
-            return ", ".join(df.columns)
+        res = requests.post(
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "meta/llama3-8b-instruct",
+                "messages": [
+                    {"role": "system", "content": "You are a professional data analyst AI. Analyze dataset and answer clearly."},
+                    {"role": "user", "content": f"Dataset:\n{summary}\n\nQuestion: {q}"}
+                ],
+                "max_tokens": 300
+            },
+            timeout=20
+        )
 
-        elif "high" in q:
-            return str((df['Burnout']=='High').sum())
-
-        elif "correlation" in q:
-            return df.corr(numeric_only=True).to_string()
-
-        elif "insight" in q:
-            return "\\n".join(generate_insights(df))
-
-        else:
-            sample = df.head(5).to_string()
-            return "Based on dataset:\\n" + sample
+        data = res.json()
+        return data.get("choices",[{}])[0].get("message",{}).get("content","No response")
 
     except:
-        return "Error"
+        return "AI error"
 
 HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Burnout AI X</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>Burnout AI</title>
 
 <style>
-body{margin:0;font-family:system-ui;background:linear-gradient(135deg,#0f172a,#020617);color:white}
-.container{max-width:1000px;margin:auto;padding:20px}
-.upload{border:2px dashed #3b82f6;padding:40px;text-align:center;border-radius:16px;margin-bottom:20px;cursor:pointer}
-.upload:hover{background:rgba(59,130,246,0.1)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px}
-.card{background:rgba(255,255,255,0.05);padding:18px;border-radius:16px;text-align:center}
+body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
+.container{max-width:1100px;margin:auto;padding:25px}
+h1{font-size:28px;margin-bottom:20px}
+.upload{border:2px dashed #334155;padding:50px;text-align:center;border-radius:14px;margin-bottom:25px;cursor:pointer;background:#020617}
+.upload:hover{border-color:#3b82f6}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px;margin-bottom:20px}
+.card{background:#020617;padding:18px;border-radius:12px;text-align:center;border:1px solid #1e293b}
+.table-container{background:#020617;border-radius:12px;overflow:auto;border:1px solid #1e293b}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px;text-align:center}
+th{color:#94a3b8}
+tr{border-bottom:1px solid #1e293b}
+tr:hover{background:#1e293b}
 #chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
-#chatbox{position:fixed;bottom:80px;right:20px;width:300px;height:400px;background:#020617;display:none;flex-direction:column}
+#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b}
 #chat-body{flex:1;overflow:auto;padding:10px}
 .msg{margin:5px;padding:8px;border-radius:6px}
 .user{background:#3b82f6}
 .ai{background:#1e293b}
+#chatbox input{border:none;padding:10px;background:#020617;color:white;border-top:1px solid #1e293b}
 </style>
 
 <script>
-function toggleChat(){document.getElementById("chatbox").style.display="flex"}
+function toggleChat(){
+let c=document.getElementById("chatbox")
+c.style.display = c.style.display==="flex"?"none":"flex"
+}
+
 function sendMessage(){
 let i=document.getElementById("chat_text")
 let m=i.value.trim()
 if(!m)return
+
 let b=document.getElementById("chat-body")
 b.innerHTML+=`<div class='msg user'>${m}</div>`
+
 let t=document.createElement("div")
 t.className="msg ai"
 t.innerHTML="Thinking..."
 b.appendChild(t)
+
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
 .then(r=>r.json()).then(d=>{t.innerHTML=d.reply})
+
 i.value=""
 }
 </script>
@@ -147,11 +168,11 @@ i.value=""
 
 <div class="container">
 
-<h1>Burnout AI X</h1>
+<h1>🔥 Burnout AI Dashboard</h1>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
-Upload dataset CSV
+📂 Upload dataset (CSV)
 <input type="file" name="file" hidden onchange="this.form.submit()">
 </label>
 </form>
@@ -165,8 +186,28 @@ Upload dataset CSV
 </div>
 {% endif %}
 
+{% if table %}
+<div class="table-container">
+<table>
+<tr>
+{% for k in table[0].keys() %}
+<th>{{k}}</th>
+{% endfor %}
+</tr>
+
+{% for r in table[:30] %}
+<tr>
+{% for v in r.values() %}
+<td>{{v}}</td>
+{% endfor %}
+</tr>
+{% endfor %}
+</table>
+</div>
+{% endif %}
+
 {% if insights %}
-<h3>Insights</h3>
+<h3 style="margin-top:20px;">Insights</h3>
 <ul>
 {% for i in insights %}
 <li>{{i}}</li>
@@ -180,7 +221,7 @@ Upload dataset CSV
 
 <div id="chatbox">
 <div id="chat-body"></div>
-<input id="chat_text" placeholder="Ask..." onkeydown="if(event.key==='Enter'){sendMessage()}">
+<input id="chat_text" placeholder="Ask about dataset..." onkeydown="if(event.key==='Enter'){sendMessage()}">
 </div>
 
 </body>
@@ -192,6 +233,7 @@ def home():
     global last_df
     stats = None
     insights = None
+    table = None
 
     if request.method=="POST":
         file = request.files.get("file")
@@ -200,8 +242,9 @@ def home():
             df, _, stats = auto_train(df)
             last_df = df
             insights = generate_insights(df)
+            table = df.to_dict(orient="records")
 
-    return render_template_string(HTML, stats=stats, insights=insights)
+    return render_template_string(HTML, stats=stats, insights=insights, table=table)
 
 @app.route("/chat", methods=["POST"])
 def chat():
