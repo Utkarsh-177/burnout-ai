@@ -64,6 +64,34 @@ def auto_train(df):
 
     return df, model, stats
 
+def recommendations(stats):
+    rec = []
+    total = stats["high"] + stats["medium"] + stats["low"]
+
+    if total == 0:
+        return ["No data available"]
+
+    high_ratio = stats["high"] / total
+    medium_ratio = stats["medium"] / total
+
+    if high_ratio > 0.4:
+        rec.append("High burnout levels detected. Immediate action required.")
+        rec.append("Reduce workload and enforce regular breaks.")
+        rec.append("Provide mental health support.")
+
+    elif medium_ratio > 0.4:
+        rec.append("Moderate burnout detected. Monitor closely.")
+        rec.append("Improve work-life balance and task distribution.")
+
+    else:
+        rec.append("Burnout levels are under control.")
+        rec.append("Maintain current work practices.")
+
+    rec.append("Encourage proper sleep and physical activity.")
+    rec.append("Create a positive and supportive environment.")
+
+    return rec
+
 def smart_answer(q, df):
     q = q.lower()
 
@@ -94,6 +122,7 @@ def smart_answer(q, df):
 
     return None
 
+# ⚠️ CHAT FUNCTION LEFT EXACTLY SAME
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
@@ -153,33 +182,18 @@ HTML = """
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-body{
-margin:0;
-font-family:system-ui;
-background:#0f172a;
-color:#e2e8f0;
-}
-
-.container{
-max-width:1100px;
-margin:auto;
-padding:30px;
-}
-
-h1{
-text-align:center;
-margin-bottom:20px;
-}
+body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
+.container{max-width:1100px;margin:auto;padding:30px}
+h1{text-align:center;margin-bottom:20px}
 
 .upload{
 display:block;
-width:100%;
 max-width:600px;
-margin:0 auto 30px auto;
-border:2px dashed #334155;
+margin:0 auto 30px;
 padding:40px;
-text-align:center;
+border:2px dashed #334155;
 border-radius:12px;
+text-align:center;
 cursor:pointer;
 }
 
@@ -199,58 +213,21 @@ width:140px;
 text-align:center;
 }
 
+.section{margin-top:40px}
+
 .table-box{
 border:1px solid #1e293b;
 border-radius:10px;
 overflow:auto;
 }
 
-table{
-width:100%;
-border-collapse:collapse;
-}
+table{width:100%;border-collapse:collapse}
+td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
 
-td,th{
-padding:10px;
-border-bottom:1px solid #1e293b;
-text-align:center;
-}
-
-#chat{
-position:fixed;
-bottom:20px;
-right:20px;
-background:#3b82f6;
-padding:14px;
-border-radius:50%;
-cursor:pointer;
-}
-
-#chatbox{
-position:fixed;
-bottom:80px;
-right:20px;
-width:320px;
-height:420px;
-background:#020617;
-display:none;
-flex-direction:column;
-border-radius:10px;
-border:1px solid #1e293b;
-}
-
-#chat-body{
-flex:1;
-overflow:auto;
-padding:10px;
-}
-
-.msg{
-margin:5px;
-padding:8px;
-border-radius:6px;
-}
-
+#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
+#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b}
+#chat-body{flex:1;overflow:auto;padding:10px}
+.msg{margin:5px;padding:8px;border-radius:6px}
 .user{background:#3b82f6}
 .ai{background:#1e293b}
 </style>
@@ -304,15 +281,7 @@ Upload CSV Dataset
 {% endif %}
 
 {% if table %}
-<div class="table-box">
-<table>
-<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
-{% for r in table[:20] %}
-<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
-{% endfor %}
-</table>
-</div>
-
+<div class="section">
 <canvas id="chart"></canvas>
 
 <script>
@@ -321,6 +290,31 @@ type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
 })
 </script>
+</div>
+
+<div class="section">
+<div class="table-box">
+<table>
+<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
+{% for r in table[:20] %}
+<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
+{% endfor %}
+</table>
+</div>
+</div>
+{% endif %}
+
+{% if recommendations %}
+<div class="section">
+<h3>Recommendations</h3>
+<div style="background:#020617;padding:20px;border-radius:10px">
+<ul>
+{% for r in recommendations %}
+<li style="margin:10px 0">{{r}}</li>
+{% endfor %}
+</ul>
+</div>
+</div>
 {% endif %}
 
 </div>
@@ -341,6 +335,7 @@ def home():
     global last_df
     stats=None
     table=None
+    rec=None
 
     if request.method=="POST":
         file=request.files.get("file")
@@ -349,8 +344,9 @@ def home():
             df,_,stats=auto_train(df)
             last_df=df
             table=df.to_dict(orient="records")
+            rec=recommendations(stats)
 
-    return render_template_string(HTML,stats=stats,table=table)
+    return render_template_string(HTML,stats=stats,table=table,recommendations=rec)
 
 @app.route("/chat",methods=["POST"])
 def chat():
