@@ -64,6 +64,15 @@ def auto_train(df):
 
     return df, model, stats
 
+def add_productivity(df):
+    mapping = {
+        "Low": "High Productivity",
+        "Medium": "Moderate Productivity",
+        "High": "Low Productivity"
+    }
+    df["Productivity"] = df["Burnout"].map(mapping)
+    return df
+
 def recommendations(stats):
     rec = []
     total = stats["high"] + stats["medium"] + stats["low"]
@@ -71,58 +80,33 @@ def recommendations(stats):
     if total == 0:
         return ["No data available"]
 
-    high_ratio = stats["high"] / total
-    medium_ratio = stats["medium"] / total
-
-    if high_ratio > 0.4:
-        rec.append("High burnout levels detected. Immediate action required.")
-        rec.append("Reduce workload and enforce regular breaks.")
-        rec.append("Provide mental health support.")
-
-    elif medium_ratio > 0.4:
-        rec.append("Moderate burnout detected. Monitor closely.")
-        rec.append("Improve work-life balance and task distribution.")
-
+    if stats["high"]/total > 0.4:
+        rec.append("High burnout detected. Reduce workload.")
+    elif stats["medium"]/total > 0.4:
+        rec.append("Moderate burnout. Monitor closely.")
     else:
-        rec.append("Burnout levels are under control.")
-        rec.append("Maintain current work practices.")
+        rec.append("Burnout under control.")
 
-    rec.append("Encourage proper sleep and physical activity.")
-    rec.append("Create a positive and supportive environment.")
-
+    rec.append("Encourage sleep and exercise.")
     return rec
 
 def smart_answer(q, df):
     q = q.lower()
-
     try:
         if "average" in q or "mean" in q:
             return df.mean(numeric_only=True).to_string()
-
-        if "max" in q:
-            return df.max(numeric_only=True).to_string()
-
-        if "min" in q:
-            return df.min(numeric_only=True).to_string()
-
         if "correlation" in q:
             return df.corr(numeric_only=True).to_string()
-
-        if "count" in q or "rows" in q:
+        if "rows" in q:
             return str(len(df))
-
         if "columns" in q:
             return ", ".join(df.columns)
-
         if "burnout" in q:
             return df["Burnout"].value_counts().to_string()
-
     except:
         return None
-
     return None
 
-# ⚠️ CHAT FUNCTION LEFT EXACTLY SAME
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
@@ -136,18 +120,13 @@ def ai_chat(q, df):
         summary = df.describe().to_string()
 
         prompt = f"""
-You are a data analyst.
-
 Dataset summary:
 {summary}
 
 User question:
 {q}
 
-Computed answer:
-{local}
-
-Explain clearly in simple words. No raw tables.
+Answer clearly.
 """
 
         res = requests.post(
@@ -165,7 +144,6 @@ Explain clearly in simple words. No raw tables.
         )
 
         data = res.json()
-
         if "choices" not in data:
             return str(data)
 
@@ -190,52 +168,65 @@ h1{text-align:center;margin-bottom:20px}
 display:block;
 max-width:600px;
 margin:0 auto 30px;
-padding:40px;
-border:2px dashed #334155;
+padding:50px;
+border:2px dashed #3b82f6;
 border-radius:12px;
 text-align:center;
 cursor:pointer;
+transition:0.3s;
+}
+.upload:hover{transform:scale(1.02);background:#020617}
+
+.switch-wrapper{display:flex;justify-content:center;margin-bottom:25px}
+.switch{
+position:relative;width:260px;height:45px;background:#020617;
+border-radius:30px;display:flex;align-items:center;overflow:hidden
+}
+.option{flex:1;text-align:center;z-index:2;cursor:pointer;color:#94a3b8}
+.option.active{color:white;font-weight:600}
+.slider{
+position:absolute;width:50%;height:100%;background:#3b82f6;
+border-radius:30px;transition:0.3s;left:0
 }
 
-.stats{
-display:flex;
-justify-content:center;
-gap:20px;
-flex-wrap:wrap;
-margin-bottom:30px;
-}
+.view-container{overflow:hidden}
+.views{display:flex;width:200%;transition:transform 0.4s ease}
+.screen{width:100%}
 
-.card{
-background:#020617;
-padding:15px;
-border-radius:10px;
-width:140px;
-text-align:center;
-}
-
-.section{margin-top:40px}
+.stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
+.card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
 
 .table-box{
-border:1px solid #1e293b;
-border-radius:10px;
-overflow:auto;
+border:1px solid #1e293b;border-radius:10px;overflow:auto;max-height:350px
 }
-
 table{width:100%;border-collapse:collapse}
 td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
+tr:hover{background:#1e293b}
 
 #chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
-#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b}
+#chatbox{
+position:fixed;bottom:80px;right:20px;width:320px;height:420px;
+background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b
+}
 #chat-body{flex:1;overflow:auto;padding:10px}
-.msg{margin:5px;padding:8px;border-radius:6px}
+.msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
 .user{background:#3b82f6}
 .ai{background:#1e293b}
 </style>
 
 <script>
+function switchView(index){
+document.getElementById("views").style.transform=`translateX(-${index*50}%)`
+let slider=document.getElementById("slider")
+slider.style.left=index===0?"0%":"50%"
+let options=document.querySelectorAll(".option")
+options.forEach(o=>o.classList.remove("active"))
+options[index].classList.add("active")
+}
+
 function toggleChat(){
 let c=document.getElementById("chatbox")
-c.style.display = c.style.display==="flex"?"none":"flex"
+c.style.display=c.style.display==="flex"?"none":"flex"
 }
 
 function sendMessage(){
@@ -248,11 +239,14 @@ b.innerHTML+=`<div class='msg user'>${m}</div>`
 
 let t=document.createElement("div")
 t.className="msg ai"
-t.innerHTML="Processing..."
+t.innerHTML="Analyzing..."
 b.appendChild(t)
 
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
-.then(r=>r.json()).then(d=>{t.innerHTML=d.reply})
+.then(r=>r.json()).then(d=>{
+t.innerHTML=d.reply
+b.scrollTop=b.scrollHeight
+})
 
 i.value=""
 }
@@ -272,6 +266,18 @@ Upload CSV Dataset
 </label>
 </form>
 
+<div class="switch-wrapper">
+<div class="switch">
+<div class="slider" id="slider"></div>
+<div class="option active" onclick="switchView(0)">Burnout</div>
+<div class="option" onclick="switchView(1)">Productivity</div>
+</div>
+</div>
+
+<div class="view-container">
+<div class="views" id="views">
+
+<div class="screen">
 {% if stats %}
 <div class="stats">
 <div class="card">High<br>{{stats.high}}</div>
@@ -279,20 +285,22 @@ Upload CSV Dataset
 <div class="card">Low<br>{{stats.low}}</div>
 </div>
 {% endif %}
-
-{% if table %}
-<div class="section">
-<canvas id="chart"></canvas>
-
-<script>
-new Chart(document.getElementById('chart'),{
-type:'bar',
-data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
-})
-</script>
+<canvas id="chart1"></canvas>
 </div>
 
-<div class="section">
+<div class="screen">
+<div class="stats">
+<div class="card">High<br>{{prod.high}}</div>
+<div class="card">Medium<br>{{prod.medium}}</div>
+<div class="card">Low<br>{{prod.low}}</div>
+</div>
+<canvas id="chart2"></canvas>
+</div>
+
+</div>
+</div>
+
+{% if table %}
 <div class="table-box">
 <table>
 <tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
@@ -300,20 +308,6 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medi
 <tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
 {% endfor %}
 </table>
-</div>
-</div>
-{% endif %}
-
-{% if recommendations %}
-<div class="section">
-<h3>Recommendations</h3>
-<div style="background:#020617;padding:20px;border-radius:10px">
-<ul>
-{% for r in recommendations %}
-<li style="margin:10px 0">{{r}}</li>
-{% endfor %}
-</ul>
-</div>
 </div>
 {% endif %}
 
@@ -323,8 +317,20 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medi
 
 <div id="chatbox">
 <div id="chat-body"></div>
-<input id="chat_text" placeholder="Ask about dataset" onkeydown="if(event.key==='Enter'){sendMessage()}">
+<input id="chat_text" placeholder="Ask..." onkeydown="if(event.key==='Enter'){sendMessage()}">
 </div>
+
+<script>
+new Chart(document.getElementById('chart1'),{
+type:'bar',
+data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
+});
+
+new Chart(document.getElementById('chart2'),{
+type:'bar',
+data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium}},{{prod.high}}]}]}
+});
+</script>
 
 </body>
 </html>
@@ -335,18 +341,24 @@ def home():
     global last_df
     stats=None
     table=None
-    rec=None
+    prod=None
 
     if request.method=="POST":
         file=request.files.get("file")
         if file:
             df=pd.read_csv(file)
             df,_,stats=auto_train(df)
+            df=add_productivity(df)
             last_df=df
             table=df.to_dict(orient="records")
-            rec=recommendations(stats)
 
-    return render_template_string(HTML,stats=stats,table=table,recommendations=rec)
+            prod={
+                "high":int((df["Productivity"]=="High Productivity").sum()),
+                "medium":int((df["Productivity"]=="Moderate Productivity").sum()),
+                "low":int((df["Productivity"]=="Low Productivity").sum())
+            }
+
+    return render_template_string(HTML,stats=stats,table=table,prod=prod)
 
 @app.route("/chat",methods=["POST"])
 def chat():
