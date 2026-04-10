@@ -184,7 +184,7 @@ HTML = """
 <!DOCTYPE html>
 <html>
 <head>
-<title>Burnout AI</title>
+<title>MindMetric AI</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -285,7 +285,7 @@ i.value=""
 
 <div class="container">
 
-<h1>Burnout AI Dashboard</h1>
+<h1>MindMetric AI Dashboard</h1>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
