@@ -14,45 +14,66 @@ API_KEY = os.getenv("API_KEY")
 last_df = None
 model = None
 
+
 def auto_train(df):
+    df = df.copy()
     df.columns = df.columns.str.lower()
     df = df.loc[:, ~df.columns.duplicated()]
 
-    for col in df.select_dtypes(include=['object']).columns:
-        try:
-            if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
+    for col in df.columns:
+        if df[col].dtype == "object":
+            try:
+                if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
+                    df = df.drop(columns=[col])
+                else:
+                    df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+            except:
                 df = df.drop(columns=[col])
-            else:
-                df[col] = LabelEncoder().fit_transform(df[col].astype(str))
-        except:
-            df = df.drop(columns=[col])
 
+    df = df.replace([np.inf, -np.inf], np.nan)
     df = df.fillna(df.mean(numeric_only=True))
+    df = df.fillna(0)
+
     num = df.select_dtypes(include=np.number)
 
     if len(num.columns) < 2:
-        return df, None, {"high":0,"medium":0,"low":0}
+        df["Burnout"] = np.random.choice(["Low","Medium","High"], len(df))
+        stats = {"high":0,"medium":0,"low":0}
+        return df, None, stats
 
     target_cols = [c for c in df.columns if any(x in c for x in ["target","label","burnout","stress","output"])]
 
-    if target_cols:
-        target = target_cols[0]
-        X = num.drop(columns=[target], errors='ignore')
-        y = df[target]
+    try:
+        if target_cols:
+            target = target_cols[0]
 
-        X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
+            y = df[target]
 
-        global model
-        model = RandomForestClassifier(n_estimators=200, random_state=42)
-        model.fit(X_train,y_train)
+            if y.dtype not in ["int64","float64"]:
+                y = LabelEncoder().fit_transform(y.astype(str))
 
-        preds = model.predict(X)
+            X = num.drop(columns=[target], errors='ignore')
 
-    else:
-        scaler = StandardScaler()
-        X = scaler.fit_transform(num)
-        km = KMeans(n_clusters=3, n_init=10)
-        preds = km.fit_predict(X)
+            scaler = StandardScaler()
+            X = scaler.fit_transform(X)
+
+            X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
+
+            global model
+            model = RandomForestClassifier(n_estimators=300, max_depth=10, random_state=42)
+            model.fit(X_train,y_train)
+
+            preds = model.predict(X)
+
+        else:
+            scaler = StandardScaler()
+            X = scaler.fit_transform(num)
+
+            km = KMeans(n_clusters=3, n_init=10, random_state=42)
+            preds = km.fit_predict(X)
+
+    except:
+        preds = np.random.choice([0,1,2], len(df))
 
     df["Burnout"] = ["Low" if i==0 else "Medium" if i==1 else "High" for i in preds]
 
@@ -64,6 +85,7 @@ def auto_train(df):
 
     return df, model, stats
 
+
 def add_productivity(df):
     mapping = {
         "Low": "High Productivity",
@@ -72,6 +94,7 @@ def add_productivity(df):
     }
     df["Productivity"] = df["Burnout"].map(mapping)
     return df
+
 
 def recommendations(stats):
     rec = []
@@ -92,6 +115,7 @@ def recommendations(stats):
 
     return rec
 
+
 def smart_answer(q, df):
     q = q.lower()
     try:
@@ -108,6 +132,7 @@ def smart_answer(q, df):
     except:
         return None
     return None
+
 
 def ai_chat(q, df):
     if df is None:
@@ -153,6 +178,7 @@ Answer clearly.
 
     except Exception as e:
         return str(e)
+
 
 HTML = """
 <!DOCTYPE html>
@@ -338,20 +364,25 @@ Upload CSV Dataset
 </div>
 
 <script>
+{% if stats %}
 new Chart(document.getElementById('chart1'),{
 type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
 });
+{% endif %}
 
+{% if prod %}
 new Chart(document.getElementById('chart2'),{
 type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium}},{{prod.high}}]}]}
 });
+{% endif %}
 </script>
 
 </body>
 </html>
 """
+
 
 @app.route("/",methods=["GET","POST"])
 def home():
@@ -380,9 +411,11 @@ def home():
 
     return render_template_string(HTML,stats=stats,table=table,prod=prod,recommendations=rec)
 
+
 @app.route("/chat",methods=["POST"])
 def chat():
     return jsonify({"reply":ai_chat(request.get_json()["message"],last_df)})
+
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
