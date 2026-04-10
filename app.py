@@ -81,13 +81,15 @@ def recommendations(stats):
         return ["No data available"]
 
     if stats["high"]/total > 0.4:
-        rec.append("High burnout detected. Reduce workload.")
+        rec.append("High burnout detected. Immediate workload reduction needed.")
     elif stats["medium"]/total > 0.4:
-        rec.append("Moderate burnout. Monitor closely.")
+        rec.append("Moderate burnout detected. Monitor and balance workload.")
     else:
-        rec.append("Burnout under control.")
+        rec.append("Burnout levels are under control.")
 
-    rec.append("Encourage sleep and exercise.")
+    rec.append("Encourage proper sleep and regular physical activity.")
+    rec.append("Promote a supportive and positive work environment.")
+
     return rec
 
 def smart_answer(q, df):
@@ -311,6 +313,21 @@ Upload CSV Dataset
 </div>
 {% endif %}
 
+{% if recommendations %}
+<div style="margin-top:40px">
+<h3 style="text-align:center">Recommendations</h3>
+<div style="background:#020617;padding:20px;border-radius:12px;max-width:700px;margin:20px auto">
+<ul style="list-style:none;padding:0">
+{% for r in recommendations %}
+<li style="margin:10px 0;padding:10px;background:#0f172a;border-left:4px solid #3b82f6">
+{{r}}
+</li>
+{% endfor %}
+</ul>
+</div>
+</div>
+{% endif %}
+
 </div>
 
 <div id="chat" onclick="toggleChat()">Chat</div>
@@ -342,6 +359,7 @@ def home():
     stats=None
     table=None
     prod=None
+    rec=None
 
     if request.method=="POST":
         file=request.files.get("file")
@@ -358,7 +376,9 @@ def home():
                 "low":int((df["Productivity"]=="Low Productivity").sum())
             }
 
-    return render_template_string(HTML,stats=stats,table=table,prod=prod)
+            rec=recommendations(stats)
+
+    return render_template_string(HTML,stats=stats,table=table,prod=prod,recommendations=rec)
 
 @app.route("/chat",methods=["POST"])
 def chat():
