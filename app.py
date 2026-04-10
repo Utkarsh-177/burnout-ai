@@ -60,9 +60,14 @@ def auto_train(df):
             X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
 
             global model
-            model = RandomForestClassifier(n_estimators=300, max_depth=10, random_state=42)
-            model.fit(X_train,y_train)
+            model = RandomForestClassifier(
+                n_estimators=300,
+                max_depth=12,
+                min_samples_split=5,
+                random_state=42
+            )
 
+            model.fit(X_train,y_train)
             preds = model.predict(X)
 
         else:
@@ -189,8 +194,20 @@ HTML = """
 
 <style>
 body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
-.container{max-width:1100px;margin:auto;padding:30px}
-h1{text-align:center;margin-bottom:20px}
+
+.container{
+max-width:1100px;
+margin:auto;
+padding:30px;
+animation:fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn{
+from{opacity:0;transform:translateY(10px)}
+to{opacity:1;transform:translateY(0)}
+}
+
+h1{text-align:center;margin-bottom:10px}
 
 .upload{
 display:block;
@@ -285,7 +302,8 @@ i.value=""
 
 <div class="container">
 
-<h1>Burnout AI Dashboard</h1>
+<h1>Burnout AI</h1>
+<p style="text-align:center;color:#94a3b8">AI-powered Burnout & Productivity Insights</p>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
@@ -312,17 +330,19 @@ Upload CSV Dataset
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
 </div>
-{% endif %}
 <canvas id="chart1"></canvas>
+{% endif %}
 </div>
 
 <div class="screen">
+{% if prod %}
 <div class="stats">
 <div class="card">High<br>{{prod.high}}</div>
 <div class="card">Medium<br>{{prod.medium}}</div>
 <div class="card">Low<br>{{prod.low}}</div>
 </div>
 <canvas id="chart2"></canvas>
+{% endif %}
 </div>
 
 </div>
@@ -395,17 +415,18 @@ def home():
     if request.method=="POST":
         file=request.files.get("file")
         if file:
-            df=pd.read_csv(file)
+            df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
             df,_,stats=auto_train(df)
             df=add_productivity(df)
             last_df=df
             table=df.to_dict(orient="records")
 
-            prod={
-                "high":int((df["Productivity"]=="High Productivity").sum()),
-                "medium":int((df["Productivity"]=="Moderate Productivity").sum()),
-                "low":int((df["Productivity"]=="Low Productivity").sum())
-            }
+            if "Productivity" in df.columns:
+                prod={
+                    "high":int((df["Productivity"]=="High Productivity").sum()),
+                    "medium":int((df["Productivity"]=="Moderate Productivity").sum()),
+                    "low":int((df["Productivity"]=="Low Productivity").sum())
+                }
 
             rec=recommendations(stats)
 
