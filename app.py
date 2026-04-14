@@ -307,7 +307,7 @@ i.value=""
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
-Upload CSV Dataset
+Upload Dataset
 <input type="file" name="file" hidden onchange="this.form.submit()">
 </label>
 </form>
