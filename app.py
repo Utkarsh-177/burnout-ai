@@ -168,7 +168,7 @@ Answer clearly.
                 "Content-Type": "application/json"
             },
             json={
-                "model": "gpt-oss-20b",   # ✅ ONLY CHANGE MADE HERE
+                "model": "gpt-oss-20b",
                 "messages":[{"role":"user","content":prompt}],
                 "max_tokens":200
             },
@@ -176,6 +176,7 @@ Answer clearly.
         )
 
         data = res.json()
+
         if "choices" not in data:
             return str(data)
 
@@ -194,13 +195,7 @@ HTML = """
 
 <style>
 body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
-
-.container{
-max-width:1100px;
-margin:auto;
-padding:30px;
-animation:fadeIn 0.5s ease;
-}
+.container{max-width:1100px;margin:auto;padding:30px;animation:fadeIn 0.5s ease}
 
 @keyframes fadeIn{
 from{opacity:0;transform:translateY(10px)}
@@ -223,36 +218,19 @@ transition:0.3s;
 .upload:hover{transform:scale(1.02);background:#020617}
 
 .switch-wrapper{display:flex;justify-content:center;margin-bottom:25px}
-.switch{
-position:relative;width:260px;height:45px;background:#020617;
-border-radius:30px;display:flex;align-items:center;overflow:hidden
-}
-.option{flex:1;text-align:center;z-index:2;cursor:pointer;color:#94a3b8}
+.switch{position:relative;width:260px;height:45px;background:#020617;border-radius:30px;display:flex;align-items:center}
+.option{flex:1;text-align:center;cursor:pointer;color:#94a3b8}
 .option.active{color:white;font-weight:600}
-.slider{
-position:absolute;width:50%;height:100%;background:#3b82f6;
-border-radius:30px;transition:0.3s;left:0
-}
+.slider{position:absolute;width:50%;height:100%;background:#3b82f6;border-radius:30px;left:0}
 
-.view-container{overflow:hidden}
 .views{display:flex;width:200%;transition:transform 0.4s ease}
 .screen{width:100%}
 
 .stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
 .card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
 
-.table-box{
-border:1px solid #1e293b;border-radius:10px;overflow:auto;max-height:350px
-}
-table{width:100%;border-collapse:collapse}
-td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
-tr:hover{background:#1e293b}
-
 #chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
-#chatbox{
-position:fixed;bottom:80px;right:20px;width:320px;height:420px;
-background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b
-}
+#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column;border-radius:10px}
 #chat-body{flex:1;overflow:auto;padding:10px}
 .msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
 .user{background:#3b82f6}
@@ -262,11 +240,6 @@ background:#020617;display:none;flex-direction:column;border-radius:10px;border:
 <script>
 function switchView(index){
 document.getElementById("views").style.transform=`translateX(-${index*50}%)`
-let slider=document.getElementById("slider")
-slider.style.left=index===0?"0%":"50%"
-let options=document.querySelectorAll(".option")
-options.forEach(o=>o.classList.remove("active"))
-options[index].classList.add("active")
 }
 
 function toggleChat(){
@@ -299,7 +272,48 @@ i.value=""
 </head>
 
 <body>
-<!-- unchanged HTML body -->
+
+<div class="container">
+<h1>Burnout AI</h1>
+
+<form method="POST" enctype="multipart/form-data">
+<label class="upload">
+Upload Dataset
+<input type="file" name="file" hidden onchange="this.form.submit()">
+</label>
+</form>
+
+<div class="stats">
+{% if stats %}
+<div class="card">High<br>{{stats.high}}</div>
+<div class="card">Medium<br>{{stats.medium}}</div>
+<div class="card">Low<br>{{stats.low}}</div>
+{% endif %}
+</div>
+
+<canvas id="chart1"></canvas>
+</div>
+
+<div id="chat" onclick="toggleChat()">Chat</div>
+
+<div id="chatbox">
+<div id="chat-body"></div>
+<input id="chat_text" onkeydown="if(event.key==='Enter'){sendMessage()}">
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+{% if stats %}
+if(document.getElementById("chart1")){
+new Chart(document.getElementById('chart1'),{
+type:'bar',
+data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
+});
+}
+{% endif %}
+});
+</script>
+
 </body>
 </html>
 """
@@ -321,14 +335,6 @@ def home():
             df=add_productivity(df)
             last_df=df
             table=df.to_dict(orient="records")
-
-            if "Productivity" in df.columns:
-                prod={
-                    "high":int((df["Productivity"]=="High Productivity").sum()),
-                    "medium":int((df["Productivity"]=="Moderate Productivity").sum()),
-                    "low":int((df["Productivity"]=="Low Productivity").sum())
-                }
-
             rec=recommendations(stats)
 
     return render_template_string(HTML,stats=stats,table=table,prod=prod,recommendations=rec)
@@ -340,4 +346,4 @@ def chat():
 
 
 if __name__=="__main__":
-    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
+    app.run(debug=True)
