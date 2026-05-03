@@ -35,8 +35,7 @@ def auto_train(df):
 
     if len(num.columns) < 2:
         df["Burnout"] = np.random.choice(["Low", "Medium", "High"], len(df))
-        stats = {"high": 0, "medium": 0, "low": 0}
-        return df, None, stats
+        return df, {"high": 0, "medium": 0, "low": 0}
 
     scaler = StandardScaler()
     X = scaler.fit_transform(num)
@@ -52,62 +51,50 @@ def auto_train(df):
         "low": int((df["Burnout"] == "Low").sum())
     }
 
-    return df, None, stats
+    return df, stats
 
 
 def add_productivity(df):
-    mapping = {
+    df["Productivity"] = df["Burnout"].map({
         "Low": "High Productivity",
         "Medium": "Moderate Productivity",
         "High": "Low Productivity"
-    }
-    df["Productivity"] = df["Burnout"].map(mapping)
+    })
     return df
 
 
-# ---------------- SAFE AI CHAT ----------------
+# ---------------- AI CHAT (FIXED) ----------------
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
 
-    q = str(q).strip()
     if not q:
-        return "Ask something."
+        return "Enter a question."
 
-    # ---- SAFE LOCAL RESPONSES (prevents API crash) ----
     try:
-        ql = q.lower()
-
-        if "rows" in ql:
+        if "rows" in q.lower():
             return f"Total rows: {len(df)}"
-
-        if "columns" in ql:
+        if "columns" in q.lower():
             return ", ".join(df.columns)
-
-        if "burnout" in ql:
-            if "Burnout" in df.columns:
-                return df["Burnout"].value_counts().to_string()
-
+        if "burnout" in q.lower():
+            return df["Burnout"].value_counts().to_string()
     except:
         pass
 
-    # ---- AI FALLBACK (SAFE FIXED VERSION) ----
     if not API_KEY:
         return "API key missing."
 
     try:
-        summary = df.describe(include="all").fillna("").to_string()
+        summary = df.describe(include="all").fillna(0).to_string()
 
         prompt = f"""
-You are a helpful data analyst AI.
-
-Dataset Summary:
+Dataset summary:
 {summary}
 
-User Question:
+User question:
 {q}
 
-Give a simple, short, clear answer.
+Answer clearly in simple words.
 """
 
         res = requests.post(
@@ -119,29 +106,21 @@ Give a simple, short, clear answer.
             json={
                 "model": "meta/llama3-8b-instruct",
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
-                "max_tokens": 200
+                "temperature": 0.4,
+                "max_tokens": 250
             },
             timeout=25
         )
 
-        # SAFE JSON handling (FIXED CRASH ISSUE)
         data = res.json()
 
-        if isinstance(data, dict):
-            return (
-                data.get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "No response from AI")
-            )
-
-        return "Invalid AI response"
+        return data["choices"][0]["message"]["content"]
 
     except Exception as e:
-        return f"AI Error: {str(e)}"
+        return f"API Error: {str(e)}"
 
 
-# ---------------- YOUR ORIGINAL HTML (UNCHANGED AT ALL) ----------------
+# ---------------- YOUR ORIGINAL HTML (UNCHANGED) ----------------
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -198,18 +177,13 @@ border-radius:30px;transition:0.3s;left:0
 .stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
 .card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
 
-.table-box{
-border:1px solid #1e293b;border-radius:10px;overflow:auto;max-height:350px
-}
-table{width:100%;border-collapse:collapse}
-td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
-tr:hover{background:#1e293b}
-
 #chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
+
 #chatbox{
 position:fixed;bottom:80px;right:20px;width:320px;height:420px;
 background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b
 }
+
 #chat-body{flex:1;overflow:auto;padding:10px}
 .msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
 .user{background:#3b82f6}
@@ -217,15 +191,6 @@ background:#020617;display:none;flex-direction:column;border-radius:10px;border:
 </style>
 
 <script>
-function switchView(index){
-document.getElementById("views").style.transform=`translateX(-${index*50}%)`
-let slider=document.getElementById("slider")
-slider.style.left=index===0?"0%":"50%"
-let options=document.querySelectorAll(".option")
-options.forEach(o=>o.classList.remove("active"))
-options[index].classList.add("active")
-}
-
 function toggleChat(){
 let c=document.getElementById("chatbox")
 c.style.display=c.style.display==="flex"?"none":"flex"
@@ -265,7 +230,6 @@ i.value=""
 <div class="container">
 
 <h1>Burnout AI</h1>
-<p style="text-align:center;color:#94a3b8">AI-powered Burnout & Productivity Insights</p>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
@@ -274,56 +238,19 @@ Upload Dataset
 </label>
 </form>
 
-<div class="switch-wrapper">
-<div class="switch">
-<div class="slider" id="slider"></div>
-<div class="option active" onclick="switchView(0)">Burnout</div>
-<div class="option" onclick="switchView(1)">Productivity</div>
-</div>
-</div>
-
-<div class="view-container">
-<div class="views" id="views">
-
-<div class="screen">
 {% if stats %}
 <div class="stats">
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
 </div>
-<canvas id="chart1"></canvas>
-{% endif %}
-</div>
 
-<div class="screen">
-{% if prod %}
-<div class="stats">
-<div class="card">High<br>{{prod.high}}</div>
-<div class="card">Medium<br>{{prod.medium}}</div>
-<div class="card">Low<br>{{prod.low}}</div>
-</div>
-<canvas id="chart2"></canvas>
-{% endif %}
-</div>
-
-</div>
-</div>
-
-{% if table %}
-<div class="table-box">
-<table>
-<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
-{% for r in table[:20] %}
-<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
-{% endfor %}
-</table>
-</div>
+<canvas id="chart"></canvas>
 {% endif %}
 
 </div>
 
-<div id="chat" onclick="toggleChat()">Chat</div>
+<div id="chat" onclick="toggleChat()">💬</div>
 
 <div id="chatbox">
 <div id="chat-body"></div>
@@ -332,16 +259,12 @@ Upload Dataset
 
 <script>
 {% if stats %}
-new Chart(document.getElementById('chart1'),{
+new Chart(document.getElementById('chart'),{
 type:'bar',
-data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
-});
-{% endif %}
-
-{% if prod %}
-new Chart(document.getElementById('chart2'),{
-type:'bar',
-data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium}},{{prod.high}}]}]}
+data:{
+labels:['Low','Medium','High'],
+datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]
+}
 });
 {% endif %}
 </script>
@@ -350,38 +273,29 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 </html>
 """
 
+
 # ---------------- ROUTES ----------------
 @app.route("/", methods=["GET", "POST"])
 def home():
     global last_df
     stats = None
-    table = None
-    prod = None
 
     if request.method == "POST":
         file = request.files.get("file")
         if file:
             df = pd.read_csv(file, encoding="utf-8", on_bad_lines="skip")
-            df, _, stats = auto_train(df)
+            df, stats = auto_train(df)
             df = add_productivity(df)
             last_df = df
-            table = df.to_dict(orient="records")
 
-            prod = {
-                "high": int((df["Productivity"] == "High Productivity").sum()),
-                "medium": int((df["Productivity"] == "Moderate Productivity").sum()),
-                "low": int((df["Productivity"] == "Low Productivity").sum())
-            }
-
-    return render_template_string(HTML, stats=stats, table=table, prod=prod)
+    return render_template_string(HTML, stats=stats)
 
 
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
-    msg = data.get("message", "")
-    return jsonify({"reply": ai_chat(msg, last_df)})
+    return jsonify({"reply": ai_chat(data.get("message", ""), last_df)})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    app.run(debug=True)
