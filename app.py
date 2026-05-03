@@ -20,10 +20,7 @@ def auto_train(df):
     for col in df.columns:
         if df[col].dtype == "object":
             try:
-                if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
-                    df = df.drop(columns=[col])
-                else:
-                    df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+                df[col] = LabelEncoder().fit_transform(df[col].astype(str))
             except:
                 df = df.drop(columns=[col])
 
@@ -63,65 +60,102 @@ def add_productivity(df):
     return df
 
 
-# ---------------- AI CHAT (FIXED) ----------------
+# ---------------- 🔥 AI CHAT (FULL FIXED + STABLE) ----------------
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
 
-    if not q:
-        return "Enter a question."
+    if not q or not q.strip():
+        return "Please enter a question."
 
+    q_lower = q.lower()
+
+    # ---------- FAST LOCAL ANSWERS ----------
     try:
-        if "rows" in q.lower():
+        if "rows" in q_lower:
             return f"Total rows: {len(df)}"
-        if "columns" in q.lower():
-            return ", ".join(df.columns)
-        if "burnout" in q.lower():
+
+        if "columns" in q_lower:
+            return "Columns: " + ", ".join(df.columns)
+
+        if "burnout" in q_lower:
             return df["Burnout"].value_counts().to_string()
+
+        if "summary" in q_lower:
+            return df.describe(include="all").fillna(0).to_string()
     except:
         pass
 
+    # ---------- API CHECK ----------
     if not API_KEY:
         return "API key missing."
 
     try:
         summary = df.describe(include="all").fillna(0).to_string()
 
-        prompt = f"""
-Dataset summary:
+        payload = {
+            "model": "meta/llama-3.3-70b-instruct",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a smart data assistant. Give simple, clear, human-like answers."
+                },
+                {
+                    "role": "user",
+                    "content": f"""
+Dataset Summary:
 {summary}
 
-User question:
+User Question:
 {q}
 
 Answer clearly in simple words.
 """
+                }
+            ],
+            "temperature": 0.4,
+            "max_tokens": 300,
+            "top_p": 0.9
+        }
+
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        }
 
         res = requests.post(
             "https://integrate.api.nvidia.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "meta/llama3-8b-instruct",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.4,
-                "max_tokens": 250
-            },
+            json=payload,
+            headers=headers,
             timeout=25
         )
 
-        data = res.json()
+        # ---------- SAFE JSON PARSING ----------
+        try:
+            data = res.json()
+        except:
+            return f"Invalid API response: {res.text}"
 
-        return data["choices"][0]["message"]["content"]
+        # ---------- ERROR HANDLING ----------
+        if "error" in data:
+            return f"API Error: {data['error']}"
+
+        if "detail" in data:
+            return f"API Detail: {data['detail']}"
+
+        # ---------- NORMAL RESPONSE ----------
+        choices = data.get("choices")
+        if choices and len(choices) > 0:
+            return choices[0].get("message", {}).get("content", "No response")
+
+        return f"Unexpected API format: {data}"
 
     except Exception as e:
-        return f"API Error: {str(e)}"
+        return f"Request failed: {str(e)}"
 
 
 # ---------------- YOUR ORIGINAL HTML (UNCHANGED) ----------------
-HTML = """
+HTML = """ 
 <!DOCTYPE html>
 <html>
 <head>
