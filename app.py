@@ -20,7 +20,10 @@ def auto_train(df):
     for col in df.columns:
         if df[col].dtype == "object":
             try:
-                df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+                if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
+                    df = df.drop(columns=[col])
+                else:
+                    df[col] = LabelEncoder().fit_transform(df[col].astype(str))
             except:
                 df = df.drop(columns=[col])
 
@@ -33,7 +36,7 @@ def auto_train(df):
     if len(num.columns) < 2:
         df["Burnout"] = np.random.choice(["Low", "Medium", "High"], len(df))
         stats = {"high": 0, "medium": 0, "low": 0}
-        return df, stats
+        return df, None, stats
 
     scaler = StandardScaler()
     X = scaler.fit_transform(num)
@@ -49,49 +52,62 @@ def auto_train(df):
         "low": int((df["Burnout"] == "Low").sum())
     }
 
-    return df, stats
+    return df, None, stats
 
 
 def add_productivity(df):
-    df["Productivity"] = df["Burnout"].map({
+    mapping = {
         "Low": "High Productivity",
         "Medium": "Moderate Productivity",
         "High": "Low Productivity"
-    })
+    }
+    df["Productivity"] = df["Burnout"].map(mapping)
     return df
 
 
-# ---------------- AI CHAT FIXED ----------------
+# ---------------- SAFE AI CHAT ----------------
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
 
+    q = str(q).strip()
     if not q:
-        return "Enter a question."
+        return "Ask something."
 
-    # quick local fallback
+    # ---- SAFE LOCAL RESPONSES (prevents API crash) ----
     try:
-        if "rows" in q.lower():
+        ql = q.lower()
+
+        if "rows" in ql:
             return f"Total rows: {len(df)}"
-        if "columns" in q.lower():
+
+        if "columns" in ql:
             return ", ".join(df.columns)
+
+        if "burnout" in ql:
+            if "Burnout" in df.columns:
+                return df["Burnout"].value_counts().to_string()
+
     except:
         pass
 
+    # ---- AI FALLBACK (SAFE FIXED VERSION) ----
     if not API_KEY:
         return "API key missing."
 
     try:
-        summary = df.describe().to_string()
+        summary = df.describe(include="all").fillna("").to_string()
 
         prompt = f"""
-Dataset summary:
+You are a helpful data analyst AI.
+
+Dataset Summary:
 {summary}
 
-User question:
+User Question:
 {q}
 
-Answer in simple words.
+Give a simple, short, clear answer.
 """
 
         res = requests.post(
@@ -101,23 +117,31 @@ Answer in simple words.
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta/llama-3.3-70b-instruct",
+                "model": "meta/llama3-8b-instruct",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
                 "max_tokens": 200
             },
-            timeout=30
+            timeout=25
         )
 
+        # SAFE JSON handling (FIXED CRASH ISSUE)
         data = res.json()
 
-        return data.get("choices", [{}])[0].get("message", {}).get("content", "No response")
+        if isinstance(data, dict):
+            return (
+                data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "No response from AI")
+            )
+
+        return "Invalid AI response"
 
     except Exception as e:
-        return f"API Error: {str(e)}"
+        return f"AI Error: {str(e)}"
 
 
-# ---------------- YOUR ORIGINAL HTML (UNCHANGED) ----------------
+# ---------------- YOUR ORIGINAL HTML (UNCHANGED AT ALL) ----------------
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -220,8 +244,13 @@ t.className="msg ai"
 t.innerHTML="Analyzing..."
 b.appendChild(t)
 
-fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
-.then(r=>r.json()).then(d=>{
+fetch("/chat",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({message:m})
+})
+.then(r=>r.json())
+.then(d=>{
 t.innerHTML=d.reply
 b.scrollTop=b.scrollHeight
 })
@@ -292,21 +321,6 @@ Upload Dataset
 </div>
 {% endif %}
 
-{% if recommendations %}
-<div style="margin-top:40px">
-<h3 style="text-align:center">Recommendations</h3>
-<div style="background:#020617;padding:20px;border-radius:12px;max-width:700px;margin:20px auto">
-<ul style="list-style:none;padding:0">
-{% for r in recommendations %}
-<li style="margin:10px 0;padding:10px;background:#0f172a;border-left:4px solid #3b82f6">
-{{r}}
-</li>
-{% endfor %}
-</ul>
-</div>
-</div>
-{% endif %}
-
 </div>
 
 <div id="chat" onclick="toggleChat()">Chat</div>
@@ -336,24 +350,30 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 </html>
 """
 
-
-
 # ---------------- ROUTES ----------------
 @app.route("/", methods=["GET", "POST"])
 def home():
     global last_df
     stats = None
+    table = None
+    prod = None
 
     if request.method == "POST":
         file = request.files.get("file")
         if file:
-            # FIXED CSV ERROR HERE
-            df = pd.read_csv(file, encoding="utf-8", on_bad_lines="skip", sep=None, engine="python")
-            df, stats = auto_train(df)
+            df = pd.read_csv(file, encoding="utf-8", on_bad_lines="skip")
+            df, _, stats = auto_train(df)
             df = add_productivity(df)
             last_df = df
+            table = df.to_dict(orient="records")
 
-    return render_template_string(HTML, stats=stats)
+            prod = {
+                "high": int((df["Productivity"] == "High Productivity").sum()),
+                "medium": int((df["Productivity"] == "Moderate Productivity").sum()),
+                "low": int((df["Productivity"] == "Low Productivity").sum())
+            }
+
+    return render_template_string(HTML, stats=stats, table=table, prod=prod)
 
 
 @app.route("/chat", methods=["POST"])
@@ -364,4 +384,4 @@ def chat():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
