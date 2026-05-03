@@ -15,6 +15,7 @@ last_df = None
 model = None
 
 
+# ================= ML PIPELINE =================
 def auto_train(df):
     df = df.copy()
     df.columns = df.columns.str.lower()
@@ -46,7 +47,6 @@ def auto_train(df):
     try:
         if target_cols:
             target = target_cols[0]
-
             y = df[target]
 
             if y.dtype not in ["int64","float64"]:
@@ -57,7 +57,7 @@ def auto_train(df):
             scaler = StandardScaler()
             X = scaler.fit_transform(X)
 
-            X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
             global model
             model = RandomForestClassifier(
@@ -67,7 +67,7 @@ def auto_train(df):
                 random_state=42
             )
 
-            model.fit(X_train,y_train)
+            model.fit(X_train, y_train)
             preds = model.predict(X)
 
         else:
@@ -91,6 +91,7 @@ def auto_train(df):
     return df, model, stats
 
 
+# ================= PRODUCTIVITY =================
 def add_productivity(df):
     mapping = {
         "Low": "High Productivity",
@@ -101,6 +102,7 @@ def add_productivity(df):
     return df
 
 
+# ================= RECOMMENDATIONS =================
 def recommendations(stats):
     rec = []
     total = stats["high"] + stats["medium"] + stats["low"]
@@ -111,19 +113,23 @@ def recommendations(stats):
     if stats["high"]/total > 0.4:
         rec.append("High burnout detected. Immediate workload reduction needed.")
     elif stats["medium"]/total > 0.4:
-        rec.append("Moderate burnout detected. Monitor and balance workload.")
+        rec.append("Moderate burnout detected. Monitor workload.")
     else:
         rec.append("Burnout levels are under control.")
 
-    rec.append("Encourage proper sleep and regular physical activity.")
-    rec.append("Promote a supportive and positive work environment.")
+    rec.append("Encourage proper sleep and physical activity.")
+    rec.append("Maintain healthy work-life balance.")
 
     return rec
 
 
+# ================= CHAT SUPPORT =================
 def smart_answer(q, df):
-    q = q.lower()
     try:
+        q = q.lower()
+        if df is None:
+            return None
+
         if "average" in q or "mean" in q:
             return df.mean(numeric_only=True).to_string()
         if "correlation" in q:
@@ -134,11 +140,14 @@ def smart_answer(q, df):
             return ", ".join(df.columns)
         if "burnout" in q:
             return df["Burnout"].value_counts().to_string()
+
     except:
         return None
+
     return None
 
 
+# ================= AI CHAT (SAFE VERSION) =================
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
@@ -152,13 +161,15 @@ def ai_chat(q, df):
         summary = df.describe().to_string()
 
         prompt = f"""
+You are an AI assistant for Burnout Prediction.
+
 Dataset summary:
 {summary}
 
 User question:
 {q}
 
-Answer clearly.
+Answer clearly and simply.
 """
 
         res = requests.post(
@@ -169,8 +180,8 @@ Answer clearly.
             },
             json={
                 "model": "gpt-oss-20b",
-                "messages":[{"role":"user","content":prompt}],
-                "max_tokens":200
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 200
             },
             timeout=20
         )
@@ -178,14 +189,15 @@ Answer clearly.
         data = res.json()
 
         if "choices" not in data:
-            return str(data)
+            return local or "AI response error."
 
         return data["choices"][0]["message"]["content"]
 
-    except Exception as e:
-        return str(e)
+    except:
+        return local or "AI service unavailable."
 
 
+# ================= HTML (CRASH SAFE FIXED) =================
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -195,53 +207,33 @@ HTML = """
 
 <style>
 body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
-.container{max-width:1100px;margin:auto;padding:30px;animation:fadeIn 0.5s ease}
+.container{max-width:1100px;margin:auto;padding:30px}
 
-@keyframes fadeIn{
-from{opacity:0;transform:translateY(10px)}
-to{opacity:1;transform:translateY(0)}
-}
-
-h1{text-align:center;margin-bottom:10px}
+h1{text-align:center}
 
 .upload{
 display:block;
 max-width:600px;
-margin:0 auto 30px;
-padding:50px;
+margin:20px auto;
+padding:40px;
 border:2px dashed #3b82f6;
-border-radius:12px;
 text-align:center;
+border-radius:12px;
 cursor:pointer;
-transition:0.3s;
 }
-.upload:hover{transform:scale(1.02);background:#020617}
 
-.switch-wrapper{display:flex;justify-content:center;margin-bottom:25px}
-.switch{position:relative;width:260px;height:45px;background:#020617;border-radius:30px;display:flex;align-items:center}
-.option{flex:1;text-align:center;cursor:pointer;color:#94a3b8}
-.option.active{color:white;font-weight:600}
-.slider{position:absolute;width:50%;height:100%;background:#3b82f6;border-radius:30px;left:0}
+.stats{display:flex;justify-content:center;gap:15px}
+.card{background:#020617;padding:15px;border-radius:10px;width:120px;text-align:center}
 
-.views{display:flex;width:200%;transition:transform 0.4s ease}
-.screen{width:100%}
-
-.stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
-.card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
-
-#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
-#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column;border-radius:10px}
+#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:12px;border-radius:50%}
+#chatbox{position:fixed;bottom:80px;right:20px;width:300px;height:400px;background:#020617;display:none;flex-direction:column}
 #chat-body{flex:1;overflow:auto;padding:10px}
-.msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
+.msg{margin:5px;padding:8px;border-radius:6px}
 .user{background:#3b82f6}
 .ai{background:#1e293b}
 </style>
 
 <script>
-function switchView(index){
-document.getElementById("views").style.transform=`translateX(-${index*50}%)`
-}
-
 function toggleChat(){
 let c=document.getElementById("chatbox")
 c.style.display=c.style.display==="flex"?"none":"flex"
@@ -257,7 +249,7 @@ b.innerHTML+=`<div class='msg user'>${m}</div>`
 
 let t=document.createElement("div")
 t.className="msg ai"
-t.innerHTML="Analyzing..."
+t.innerHTML="Thinking..."
 b.appendChild(t)
 
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
@@ -274,7 +266,8 @@ i.value=""
 <body>
 
 <div class="container">
-<h1>Burnout AI</h1>
+
+<h1>Burnout AI System</h1>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
@@ -288,13 +281,18 @@ Upload Dataset
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
+{% else %}
+<div class="card">High<br>0</div>
+<div class="card">Medium<br>0</div>
+<div class="card">Low<br>0</div>
 {% endif %}
 </div>
 
 <canvas id="chart1"></canvas>
+
 </div>
 
-<div id="chat" onclick="toggleChat()">Chat</div>
+<div id="chat" onclick="toggleChat()">💬</div>
 
 <div id="chatbox">
 <div id="chat-body"></div>
@@ -302,15 +300,18 @@ Upload Dataset
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function(){
+document.addEventListener("DOMContentLoaded",function(){
+
 {% if stats %}
-if(document.getElementById("chart1")){
 new Chart(document.getElementById('chart1'),{
 type:'bar',
-data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
-});
+data:{
+labels:['Low','Medium','High'],
+datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]
 }
+});
 {% endif %}
+
 });
 </script>
 
@@ -319,23 +320,29 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medi
 """
 
 
+# ================= ROUTES =================
 @app.route("/",methods=["GET","POST"])
 def home():
     global last_df
-    stats=None
-    table=None
-    prod=None
-    rec=None
 
-    if request.method=="POST":
-        file=request.files.get("file")
-        if file:
-            df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
-            df,_,stats=auto_train(df)
-            df=add_productivity(df)
-            last_df=df
-            table=df.to_dict(orient="records")
-            rec=recommendations(stats)
+    stats = {"high":0,"medium":0,"low":0}
+    table = []
+    prod = {}
+    rec = []
+
+    try:
+        if request.method=="POST":
+            file=request.files.get("file")
+            if file:
+                df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
+                df,_,stats=auto_train(df)
+                df=add_productivity(df)
+                last_df=df
+                table=df.to_dict(orient="records")
+                rec=recommendations(stats)
+
+    except Exception as e:
+        print("ERROR:", e)
 
     return render_template_string(HTML,stats=stats,table=table,prod=prod,recommendations=rec)
 
