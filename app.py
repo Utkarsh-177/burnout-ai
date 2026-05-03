@@ -6,6 +6,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.cluster import KMeans
 import requests, os
+import json
 
 app = Flask(__name__)
 
@@ -167,17 +168,22 @@ Answer clearly.
             },
             json={
                 "model": "llama-3_3-70b-instruct",
-                "messages":[{"role":"user","content":prompt}],
-                "max_tokens":200
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 200
             },
             timeout=20
         )
 
-        data = res.json()
-        if "choices" not in data:
-            return str(data)
+        # 🔥 FIX: safe parsing (prevents "Extra data" error)
+        try:
+            data = res.json()
+        except:
+            return res.text
 
-        return data["choices"][0]["message"]["content"]
+        if isinstance(data, dict) and "choices" in data:
+            return data["choices"][0]["message"]["content"]
+
+        return str(data)
 
     except Exception as e:
         return str(e)
@@ -402,39 +408,46 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 """
 
 
-@app.route("/",methods=["GET","POST"])
+
+
+@app.route("/", methods=["GET", "POST"])
 def home():
     global last_df
-    stats=None
-    table=None
-    prod=None
-    rec=None
+    stats = None
+    table = None
+    prod = None
+    rec = None
 
-    if request.method=="POST":
-        file=request.files.get("file")
+    if request.method == "POST":
+        file = request.files.get("file")
         if file:
             df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
-            df,_,stats=auto_train(df)
-            df=add_productivity(df)
-            last_df=df
-            table=df.to_dict(orient="records")
+            df, _, stats = auto_train(df)
+            df = add_productivity(df)
+            last_df = df
+            table = df.to_dict(orient="records")
 
             if "Productivity" in df.columns:
-                prod={
-                    "high":int((df["Productivity"]=="High Productivity").sum()),
-                    "medium":int((df["Productivity"]=="Moderate Productivity").sum()),
-                    "low":int((df["Productivity"]=="Low Productivity").sum())
+                prod = {
+                    "high": int((df["Productivity"]=="High Productivity").sum()),
+                    "medium": int((df["Productivity"]=="Moderate Productivity").sum()),
+                    "low": int((df["Productivity"]=="Low Productivity").sum())
                 }
 
-            rec=recommendations(stats)
+            rec = recommendations(stats)
 
-    return render_template_string(HTML,stats=stats,table=table,prod=prod,recommendations=rec)
+    return render_template_string(HTML, stats=stats, table=table, prod=prod, recommendations=rec)
 
 
-@app.route("/chat",methods=["POST"])
+@app.route("/chat", methods=["POST"])
 def chat():
-    return jsonify({"reply":ai_chat(request.get_json()["message"],last_df)})
+    return jsonify({"reply": ai_chat(request.get_json()["message"], last_df)})
 
 
-if __name__=="__main__":
-    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
+
+
+
+
