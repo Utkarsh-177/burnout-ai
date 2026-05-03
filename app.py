@@ -46,6 +46,7 @@ def auto_train(df):
     try:
         if target_cols:
             target = target_cols[0]
+
             y = df[target]
 
             if y.dtype not in ["int64","float64"]:
@@ -145,8 +146,6 @@ def ai_chat(q, df):
     if not API_KEY:
         return "API key missing."
 
-    local = smart_answer(q, df)
-
     try:
         summary = df.describe().to_string()
 
@@ -156,6 +155,8 @@ Dataset summary:
 
 User question:
 {q}
+
+Answer clearly.
 """
 
         res = requests.post(
@@ -165,28 +166,24 @@ User question:
                 "Content-Type": "application/json"
             },
             json={
-                "model": "gpt-oss-20b",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 200
+                "model": "llama-3_3-70b-instruct",
+                "messages":[{"role":"user","content":prompt}],
+                "max_tokens":200
             },
             timeout=20
         )
 
-        try:
-            data = res.json()
-        except:
-            return "AI response error"
+        data = res.json()
+        if "choices" not in data:
+            return str(data)
 
-        if isinstance(data, dict) and "choices" in data:
-            return data["choices"][0]["message"]["content"]
-
-        return local or str(data)
+        return data["choices"][0]["message"]["content"]
 
     except Exception as e:
         return str(e)
 
 
-HTML = """
+HTML = """ 
 <!DOCTYPE html>
 <html>
 <head>
@@ -195,49 +192,79 @@ HTML = """
 
 <style>
 body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
-.container{max-width:1100px;margin:auto;padding:30px}
 
-h1{text-align:center}
+.container{
+max-width:1100px;
+margin:auto;
+padding:30px;
+animation:fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn{
+from{opacity:0;transform:translateY(10px)}
+to{opacity:1;transform:translateY(0)}
+}
+
+h1{text-align:center;margin-bottom:10px}
 
 .upload{
 display:block;
 max-width:600px;
-margin:0 auto;
+margin:0 auto 30px;
 padding:50px;
 border:2px dashed #3b82f6;
 border-radius:12px;
 text-align:center;
 cursor:pointer;
+transition:0.3s;
+}
+.upload:hover{transform:scale(1.02);background:#020617}
+
+.switch-wrapper{display:flex;justify-content:center;margin-bottom:25px}
+.switch{
+position:relative;width:260px;height:45px;background:#020617;
+border-radius:30px;display:flex;align-items:center;overflow:hidden
+}
+.option{flex:1;text-align:center;z-index:2;cursor:pointer;color:#94a3b8}
+.option.active{color:white;font-weight:600}
+.slider{
+position:absolute;width:50%;height:100%;background:#3b82f6;
+border-radius:30px;transition:0.3s;left:0
 }
 
-.switch-wrapper{display:flex;justify-content:center;margin:20px 0}
-.switch{position:relative;width:260px;height:45px;background:#020617;border-radius:30px;display:flex}
-.option{flex:1;text-align:center;cursor:pointer;color:#94a3b8}
-.option.active{color:white}
-.slider{position:absolute;width:50%;height:100%;background:#3b82f6;border-radius:30px;left:0}
-
 .view-container{overflow:hidden}
-.views{display:flex;width:200%}
+.views{display:flex;width:200%;transition:transform 0.4s ease}
 .screen{width:100%}
 
-.stats{display:flex;justify-content:center;gap:20px}
+.stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
 .card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
 
-#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%}
-#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column}
+.table-box{
+border:1px solid #1e293b;border-radius:10px;overflow:auto;max-height:350px
+}
+table{width:100%;border-collapse:collapse}
+td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
+tr:hover{background:#1e293b}
+
+#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
+#chatbox{
+position:fixed;bottom:80px;right:20px;width:320px;height:420px;
+background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b
+}
 #chat-body{flex:1;overflow:auto;padding:10px}
-.msg{margin:6px;padding:8px;border-radius:6px}
+.msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
 .user{background:#3b82f6}
 .ai{background:#1e293b}
 </style>
 
 <script>
-function switchView(i){
-document.getElementById("views").style.transform=`translateX(-${i*50}%)`
-document.getElementById("slider").style.left=i===0?"0%":"50%"
-document.querySelectorAll(".option").forEach((o,idx)=>{
-o.classList.toggle("active",idx===i)
-})
+function switchView(index){
+document.getElementById("views").style.transform=`translateX(-${index*50}%)`
+let slider=document.getElementById("slider")
+slider.style.left=index===0?"0%":"50%"
+let options=document.querySelectorAll(".option")
+options.forEach(o=>o.classList.remove("active"))
+options[index].classList.add("active")
 }
 
 function toggleChat(){
@@ -261,16 +288,20 @@ b.appendChild(t)
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
 .then(r=>r.json()).then(d=>{
 t.innerHTML=d.reply
+b.scrollTop=b.scrollHeight
 })
+
 i.value=""
 }
 </script>
 </head>
 
 <body>
+
 <div class="container">
 
 <h1>Burnout AI</h1>
+<p style="text-align:center;color:#94a3b8">AI-powered Burnout & Productivity Insights</p>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
@@ -278,8 +309,6 @@ Upload Dataset
 <input type="file" name="file" hidden onchange="this.form.submit()">
 </label>
 </form>
-
-{% if stats %}
 
 <div class="switch-wrapper">
 <div class="switch">
@@ -293,32 +322,63 @@ Upload Dataset
 <div class="views" id="views">
 
 <div class="screen">
+{% if stats %}
 <div class="stats">
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
 </div>
 <canvas id="chart1"></canvas>
+{% endif %}
 </div>
 
 <div class="screen">
+{% if prod %}
 <div class="stats">
 <div class="card">High<br>{{prod.high}}</div>
 <div class="card">Medium<br>{{prod.medium}}</div>
 <div class="card">Low<br>{{prod.low}}</div>
 </div>
 <canvas id="chart2"></canvas>
+{% endif %}
 </div>
 
 </div>
 </div>
 
+{% if table %}
+<div class="table-box">
+<table>
+<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
+{% for r in table[:20] %}
+<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
+{% endfor %}
+</table>
+</div>
 {% endif %}
 
+{% if recommendations %}
+<div style="margin-top:40px">
+<h3 style="text-align:center">Recommendations</h3>
+<div style="background:#020617;padding:20px;border-radius:12px;max-width:700px;margin:20px auto">
+<ul style="list-style:none;padding:0">
+{% for r in recommendations %}
+<li style="margin:10px 0;padding:10px;background:#0f172a;border-left:4px solid #3b82f6">
+{{r}}
+</li>
+{% endfor %}
+</ul>
+</div>
+</div>
+{% endif %}
+
+</div>
+
 <div id="chat" onclick="toggleChat()">Chat</div>
+
 <div id="chatbox">
 <div id="chat-body"></div>
-<input id="chat_text" onkeydown="if(event.key==='Enter'){sendMessage()}">
+<input id="chat_text" placeholder="Ask..." onkeydown="if(event.key==='Enter'){sendMessage()}">
 </div>
 
 <script>
@@ -327,7 +387,9 @@ new Chart(document.getElementById('chart1'),{
 type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
 });
+{% endif %}
 
+{% if prod %}
 new Chart(document.getElementById('chart2'),{
 type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium}},{{prod.high}}]}]}
@@ -335,7 +397,6 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 {% endif %}
 </script>
 
-</div>
 </body>
 </html>
 """
@@ -356,6 +417,7 @@ def home():
             df,_,stats=auto_train(df)
             df=add_productivity(df)
             last_df=df
+            table=df.to_dict(orient="records")
 
             if "Productivity" in df.columns:
                 prod={
@@ -366,7 +428,7 @@ def home():
 
             rec=recommendations(stats)
 
-    return render_template_string(HTML,stats=stats,prod=prod,recommendations=rec)
+    return render_template_string(HTML,stats=stats,table=table,prod=prod,recommendations=rec)
 
 
 @app.route("/chat",methods=["POST"])
@@ -375,4 +437,4 @@ def chat():
 
 
 if __name__=="__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
