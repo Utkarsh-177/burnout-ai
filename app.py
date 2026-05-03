@@ -6,7 +6,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.cluster import KMeans
 import requests, os
-import json
 
 app = Flask(__name__)
 
@@ -16,6 +15,7 @@ last_df = None
 model = None
 
 
+# ------------------ ML TRAINING ------------------
 def auto_train(df):
     df = df.copy()
     df.columns = df.columns.str.lower()
@@ -47,7 +47,6 @@ def auto_train(df):
     try:
         if target_cols:
             target = target_cols[0]
-
             y = df[target]
 
             if y.dtype not in ["int64","float64"]:
@@ -58,7 +57,7 @@ def auto_train(df):
             scaler = StandardScaler()
             X = scaler.fit_transform(X)
 
-            X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
             global model
             model = RandomForestClassifier(
@@ -68,7 +67,7 @@ def auto_train(df):
                 random_state=42
             )
 
-            model.fit(X_train,y_train)
+            model.fit(X_train, y_train)
             preds = model.predict(X)
 
         else:
@@ -93,12 +92,11 @@ def auto_train(df):
 
 
 def add_productivity(df):
-    mapping = {
+    df["Productivity"] = df["Burnout"].map({
         "Low": "High Productivity",
         "Medium": "Moderate Productivity",
         "High": "Low Productivity"
-    }
-    df["Productivity"] = df["Burnout"].map(mapping)
+    })
     return df
 
 
@@ -110,36 +108,19 @@ def recommendations(stats):
         return ["No data available"]
 
     if stats["high"]/total > 0.4:
-        rec.append("High burnout detected. Immediate workload reduction needed.")
+        rec.append("High burnout detected. Reduce workload immediately.")
     elif stats["medium"]/total > 0.4:
-        rec.append("Moderate burnout detected. Monitor and balance workload.")
+        rec.append("Moderate burnout detected. Balance workload.")
     else:
         rec.append("Burnout levels are under control.")
 
-    rec.append("Encourage proper sleep and regular physical activity.")
-    rec.append("Promote a supportive and positive work environment.")
+    rec.append("Maintain proper sleep and exercise.")
+    rec.append("Create a positive work environment.")
 
     return rec
 
 
-def smart_answer(q, df):
-    q = q.lower()
-    try:
-        if "average" in q or "mean" in q:
-            return df.mean(numeric_only=True).to_string()
-        if "correlation" in q:
-            return df.corr(numeric_only=True).to_string()
-        if "rows" in q:
-            return str(len(df))
-        if "columns" in q:
-            return ", ".join(df.columns)
-        if "burnout" in q:
-            return df["Burnout"].value_counts().to_string()
-    except:
-        return None
-    return None
-
-
+# ------------------ AI CHAT FIXED ------------------
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
@@ -157,7 +138,7 @@ Dataset summary:
 User question:
 {q}
 
-Answer clearly.
+Answer clearly and simply.
 """
 
         res = requests.post(
@@ -167,28 +148,23 @@ Answer clearly.
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama-3_3-70b-instruct",
+                "model": "meta/llama-3.3-70b-instruct",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 200
+                "max_tokens": 200,
+                "temperature": 0.7
             },
             timeout=20
         )
 
-        # 🔥 FIX: safe parsing (prevents "Extra data" error)
-        try:
-            data = res.json()
-        except:
-            return res.text
+        data = res.json()
 
-        if isinstance(data, dict) and "choices" in data:
-            return data["choices"][0]["message"]["content"]
-
-        return str(data)
+        return data.get("choices", [{}])[0].get("message", {}).get("content", str(data))
 
     except Exception as e:
         return str(e)
 
 
+# ------------------ HTML UI ------------------
 HTML = """ 
 <!DOCTYPE html>
 <html>
@@ -408,11 +384,10 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 """
 
 
-
-
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET","POST"])
 def home():
     global last_df
+
     stats = None
     table = None
     prod = None
@@ -424,15 +399,15 @@ def home():
             df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
             df, _, stats = auto_train(df)
             df = add_productivity(df)
+
             last_df = df
             table = df.to_dict(orient="records")
 
-            if "Productivity" in df.columns:
-                prod = {
-                    "high": int((df["Productivity"]=="High Productivity").sum()),
-                    "medium": int((df["Productivity"]=="Moderate Productivity").sum()),
-                    "low": int((df["Productivity"]=="Low Productivity").sum())
-                }
+            prod = {
+                "high": int((df["Productivity"]=="High Productivity").sum()),
+                "medium": int((df["Productivity"]=="Moderate Productivity").sum()),
+                "low": int((df["Productivity"]=="Low Productivity").sum())
+            }
 
             rec = recommendations(stats)
 
@@ -441,13 +416,9 @@ def home():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    return jsonify({"reply": ai_chat(request.get_json()["message"], last_df)})
+    data = request.get_json(silent=True) or {}
+    return jsonify({"reply": ai_chat(data.get("message",""), last_df)})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
-
-
-
-
+    app.run(host="0.0.0.0", port=10000)
