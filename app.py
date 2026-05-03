@@ -183,13 +183,18 @@ border-radius:30px;transition:0.3s;left:0
 .stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
 .card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
 
-#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
+.table-box{
+border:1px solid #1e293b;border-radius:10px;overflow:auto;max-height:350px
+}
+table{width:100%;border-collapse:collapse}
+td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
+tr:hover{background:#1e293b}
 
+#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
 #chatbox{
 position:fixed;bottom:80px;right:20px;width:320px;height:420px;
 background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b
 }
-
 #chat-body{flex:1;overflow:auto;padding:10px}
 .msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
 .user{background:#3b82f6}
@@ -221,16 +226,11 @@ b.innerHTML+=`<div class='msg user'>${m}</div>`
 
 let t=document.createElement("div")
 t.className="msg ai"
-t.innerHTML="Thinking..."
+t.innerHTML="Analyzing..."
 b.appendChild(t)
 
-fetch("/chat",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({message:m})
-})
-.then(r=>r.json())
-.then(d=>{
+fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
+.then(r=>r.json()).then(d=>{
 t.innerHTML=d.reply
 b.scrollTop=b.scrollHeight
 })
@@ -245,6 +245,7 @@ i.value=""
 <div class="container">
 
 <h1>Burnout AI</h1>
+<p style="text-align:center;color:#94a3b8">AI-powered Burnout & Productivity Insights</p>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
@@ -253,19 +254,71 @@ Upload Dataset
 </label>
 </form>
 
+<div class="switch-wrapper">
+<div class="switch">
+<div class="slider" id="slider"></div>
+<div class="option active" onclick="switchView(0)">Burnout</div>
+<div class="option" onclick="switchView(1)">Productivity</div>
+</div>
+</div>
+
+<div class="view-container">
+<div class="views" id="views">
+
+<div class="screen">
 {% if stats %}
 <div class="stats">
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
 </div>
+<canvas id="chart1"></canvas>
+{% endif %}
+</div>
 
-<canvas id="chart"></canvas>
+<div class="screen">
+{% if prod %}
+<div class="stats">
+<div class="card">High<br>{{prod.high}}</div>
+<div class="card">Medium<br>{{prod.medium}}</div>
+<div class="card">Low<br>{{prod.low}}</div>
+</div>
+<canvas id="chart2"></canvas>
+{% endif %}
+</div>
+
+</div>
+</div>
+
+{% if table %}
+<div class="table-box">
+<table>
+<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
+{% for r in table[:20] %}
+<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
+{% endfor %}
+</table>
+</div>
+{% endif %}
+
+{% if recommendations %}
+<div style="margin-top:40px">
+<h3 style="text-align:center">Recommendations</h3>
+<div style="background:#020617;padding:20px;border-radius:12px;max-width:700px;margin:20px auto">
+<ul style="list-style:none;padding:0">
+{% for r in recommendations %}
+<li style="margin:10px 0;padding:10px;background:#0f172a;border-left:4px solid #3b82f6">
+{{r}}
+</li>
+{% endfor %}
+</ul>
+</div>
+</div>
 {% endif %}
 
 </div>
 
-<div id="chat" onclick="toggleChat()">💬</div>
+<div id="chat" onclick="toggleChat()">Chat</div>
 
 <div id="chatbox">
 <div id="chat-body"></div>
@@ -274,12 +327,16 @@ Upload Dataset
 
 <script>
 {% if stats %}
-new Chart(document.getElementById('chart'),{
+new Chart(document.getElementById('chart1'),{
 type:'bar',
-data:{
-labels:['Low','Medium','High'],
-datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]
-}
+data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
+});
+{% endif %}
+
+{% if prod %}
+new Chart(document.getElementById('chart2'),{
+type:'bar',
+data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium}},{{prod.high}}]}]}
 });
 {% endif %}
 </script>
