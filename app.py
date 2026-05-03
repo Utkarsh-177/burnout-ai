@@ -2,17 +2,17 @@ from flask import Flask, request, render_template_string, jsonify
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.cluster import KMeans
 import requests, os
 
 app = Flask(__name__)
 
 API_KEY = os.getenv("API_KEY")
+
 last_df = None
 
 
-# ---------------- ML PROCESS ----------------
+# ---------------- DATA PROCESS ----------------
 def auto_train(df):
     df = df.copy()
     df.columns = df.columns.str.lower()
@@ -21,7 +21,10 @@ def auto_train(df):
     for col in df.columns:
         if df[col].dtype == "object":
             try:
-                df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+                if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
+                    df = df.drop(columns=[col])
+                else:
+                    df[col] = LabelEncoder().fit_transform(df[col].astype(str))
             except:
                 df = df.drop(columns=[col])
 
@@ -32,31 +35,28 @@ def auto_train(df):
     num = df.select_dtypes(include=np.number)
 
     if len(num.columns) < 2:
-        df["Burnout"] = np.random.choice(["Low","Medium","High"], len(df))
-        stats = {"high":0,"medium":0,"low":0}
+        df["Burnout"] = np.random.choice(["Low", "Medium", "High"], len(df))
+        stats = {"high": 0, "medium": 0, "low": 0}
         return df, stats
 
-    try:
-        scaler = StandardScaler()
-        X = scaler.fit_transform(num)
+    scaler = StandardScaler()
+    X = scaler.fit_transform(num)
 
-        km = KMeans(n_clusters=3, n_init=10, random_state=42)
-        preds = km.fit_predict(X)
+    km = KMeans(n_clusters=3, n_init=10, random_state=42)
+    preds = km.fit_predict(X)
 
-    except:
-        preds = np.random.choice([0,1,2], len(df))
-
-    df["Burnout"] = ["Low" if i==0 else "Medium" if i==1 else "High" for i in preds]
+    df["Burnout"] = ["Low" if i == 0 else "Medium" if i == 1 else "High" for i in preds]
 
     stats = {
-        "high": int((df["Burnout"]=="High").sum()),
-        "medium": int((df["Burnout"]=="Medium").sum()),
-        "low": int((df["Burnout"]=="Low").sum())
+        "high": int((df["Burnout"] == "High").sum()),
+        "medium": int((df["Burnout"] == "Medium").sum()),
+        "low": int((df["Burnout"] == "Low").sum())
     }
 
     return df, stats
 
 
+# ---------------- PRODUCTIVITY ----------------
 def add_productivity(df):
     df["Productivity"] = df["Burnout"].map({
         "Low": "High Productivity",
@@ -66,22 +66,32 @@ def add_productivity(df):
     return df
 
 
-# ---------------- CHAT AI ----------------
+# ---------------- RECOMMENDATIONS ----------------
+def recommendations(stats):
+    total = stats["high"] + stats["medium"] + stats["low"]
+
+    if total == 0:
+        return ["No data available"]
+
+    rec = []
+
+    if stats["high"] / total > 0.4:
+        rec.append("High burnout detected. Immediate workload reduction needed.")
+    elif stats["medium"] / total > 0.4:
+        rec.append("Moderate burnout detected. Balance workload.")
+    else:
+        rec.append("Burnout levels are under control.")
+
+    rec.append("Maintain sleep and hydration.")
+    rec.append("Encourage work-life balance.")
+
+    return rec
+
+
+# ---------------- AI CHAT ----------------
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
-
-    if not q:
-        return "Empty message."
-
-    # fallback local logic
-    try:
-        if "rows" in q.lower():
-            return f"Total rows: {len(df)}"
-        if "columns" in q.lower():
-            return ", ".join(df.columns)
-    except:
-        pass
 
     if not API_KEY:
         return "API key missing."
@@ -96,7 +106,7 @@ Dataset summary:
 User question:
 {q}
 
-Give simple answer.
+Answer clearly.
 """
 
         res = requests.post(
@@ -106,27 +116,24 @@ Give simple answer.
                 "Content-Type": "application/json"
             },
             json={
-                "model": "meta/llama-3.3-70b-instruct",
+                "model": "llama-3.3-70b-instruct",
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
                 "max_tokens": 200
             },
-            timeout=30
+            timeout=25
         )
 
-        data = res.json()
-
-        return (
-            data.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "No response")
-        )
+        try:
+            data = res.json()
+            return data["choices"][0]["message"]["content"]
+        except:
+            return "AI response error."
 
     except Exception as e:
-        return f"API Error: {str(e)}"
+        return str(e)
 
 
-# ---------------- HTML (YOUR ORIGINAL UI - UNCHANGED) ----------------
+# ---------------- ORIGINAL HTML (UNCHANGED) ----------------
 HTML = """ 
 <!DOCTYPE html>
 <html>
@@ -347,28 +354,42 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 
 
 # ---------------- ROUTES ----------------
-@app.route("/", methods=["GET","POST"])
+@app.route("/", methods=["GET", "POST"])
 def home():
     global last_df
+
     stats = None
+    table = None
+    prod = None
+    rec = None
 
     if request.method == "POST":
         file = request.files.get("file")
+
         if file:
-            df = pd.read_csv(file, on_bad_lines="skip")
+            df = pd.read_csv(file, encoding="utf-8", on_bad_lines="skip")
             df, stats = auto_train(df)
             df = add_productivity(df)
-            last_df = df
 
-    return render_template_string(HTML, stats=stats)
+            last_df = df
+            table = df.to_dict(orient="records")
+
+            prod = {
+                "high": int((df["Productivity"] == "High Productivity").sum()),
+                "medium": int((df["Productivity"] == "Moderate Productivity").sum()),
+                "low": int((df["Productivity"] == "Low Productivity").sum())
+            }
+
+            rec = recommendations(stats)
+
+    return render_template_string(HTML, stats=stats, table=table, prod=prod, recommendations=rec)
 
 
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
-    msg = data.get("message","")
-    return jsonify({"reply": ai_chat(msg, last_df)})
+    return jsonify({"reply": ai_chat(data.get("message", ""), last_df)})
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
