@@ -1,6 +1,8 @@
 from flask import Flask, request, render_template_string, jsonify
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.cluster import KMeans
 import requests, os
@@ -10,9 +12,10 @@ app = Flask(__name__)
 API_KEY = os.getenv("API_KEY")
 
 last_df = None
+model = None
 
 
-# ---------------- DATA PROCESS ----------------
+# -------------------- ML PART --------------------
 def auto_train(df):
     df = df.copy()
     df.columns = df.columns.str.lower()
@@ -37,13 +40,17 @@ def auto_train(df):
     if len(num.columns) < 2:
         df["Burnout"] = np.random.choice(["Low", "Medium", "High"], len(df))
         stats = {"high": 0, "medium": 0, "low": 0}
-        return df, stats
+        return df, None, stats
 
-    scaler = StandardScaler()
-    X = scaler.fit_transform(num)
+    try:
+        scaler = StandardScaler()
+        X = scaler.fit_transform(num)
 
-    km = KMeans(n_clusters=3, n_init=10, random_state=42)
-    preds = km.fit_predict(X)
+        km = KMeans(n_clusters=3, n_init=10, random_state=42)
+        preds = km.fit_predict(X)
+
+    except:
+        preds = np.random.choice([0, 1, 2], len(df))
 
     df["Burnout"] = ["Low" if i == 0 else "Medium" if i == 1 else "High" for i in preds]
 
@@ -53,10 +60,9 @@ def auto_train(df):
         "low": int((df["Burnout"] == "Low").sum())
     }
 
-    return df, stats
+    return df, None, stats
 
 
-# ---------------- PRODUCTIVITY ----------------
 def add_productivity(df):
     df["Productivity"] = df["Burnout"].map({
         "Low": "High Productivity",
@@ -66,29 +72,27 @@ def add_productivity(df):
     return df
 
 
-# ---------------- RECOMMENDATIONS ----------------
 def recommendations(stats):
+    rec = []
     total = stats["high"] + stats["medium"] + stats["low"]
 
     if total == 0:
         return ["No data available"]
 
-    rec = []
-
     if stats["high"] / total > 0.4:
-        rec.append("High burnout detected. Immediate workload reduction needed.")
+        rec.append("High burnout detected. Reduce workload immediately.")
     elif stats["medium"] / total > 0.4:
-        rec.append("Moderate burnout detected. Balance workload.")
+        rec.append("Moderate burnout detected. Monitor workload.")
     else:
-        rec.append("Burnout levels are under control.")
+        rec.append("Burnout levels are stable.")
 
-    rec.append("Maintain sleep and hydration.")
-    rec.append("Encourage work-life balance.")
+    rec.append("Encourage sleep and exercise.")
+    rec.append("Maintain balanced work environment.")
 
     return rec
 
 
-# ---------------- AI CHAT ----------------
+# -------------------- AI CHAT FIXED --------------------
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
@@ -100,13 +104,15 @@ def ai_chat(q, df):
         summary = df.describe().to_string()
 
         prompt = f"""
-Dataset summary:
+You are an AI assistant for burnout prediction system.
+
+Dataset:
 {summary}
 
 User question:
 {q}
 
-Answer clearly.
+Give short clear answer.
 """
 
         res = requests.post(
@@ -116,8 +122,11 @@ Answer clearly.
                 "Content-Type": "application/json"
             },
             json={
-                "model": "llama-3.3-70b-instruct",
-                "messages": [{"role": "user", "content": prompt}],
+                "model": "meta/llama-3.3-70b-instruct",
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.3,
                 "max_tokens": 200
             },
             timeout=25
@@ -125,15 +134,19 @@ Answer clearly.
 
         try:
             data = res.json()
-            return data["choices"][0]["message"]["content"]
-        except:
-            return "AI response error."
+        except Exception:
+            return f"API error: {res.text}"
+
+        if "choices" not in data:
+            return str(data)
+
+        return data["choices"][0]["message"]["content"]
 
     except Exception as e:
         return str(e)
 
 
-# ---------------- ORIGINAL HTML (UNCHANGED) ----------------
+# -------------------- YOUR ORIGINAL UI (UNCHANGED) --------------------
 HTML = """ 
 <!DOCTYPE html>
 <html>
@@ -353,7 +366,7 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 """
 
 
-# ---------------- ROUTES ----------------
+# -------------------- ROUTES --------------------
 @app.route("/", methods=["GET", "POST"])
 def home():
     global last_df
@@ -365,19 +378,18 @@ def home():
 
     if request.method == "POST":
         file = request.files.get("file")
-
         if file:
-            df = pd.read_csv(file, encoding="utf-8", on_bad_lines="skip")
-            df, stats = auto_train(df)
+            df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
+            df, _, stats = auto_train(df)
             df = add_productivity(df)
 
             last_df = df
             table = df.to_dict(orient="records")
 
             prod = {
-                "high": int((df["Productivity"] == "High Productivity").sum()),
-                "medium": int((df["Productivity"] == "Moderate Productivity").sum()),
-                "low": int((df["Productivity"] == "Low Productivity").sum())
+                "high": int((df["Productivity"]=="High Productivity").sum()),
+                "medium": int((df["Productivity"]=="Moderate Productivity").sum()),
+                "low": int((df["Productivity"]=="Low Productivity").sum())
             }
 
             rec = recommendations(stats)
@@ -388,8 +400,9 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
-    return jsonify({"reply": ai_chat(data.get("message", ""), last_df)})
+    msg = data.get("message", "")
+    return jsonify({"reply": ai_chat(msg, last_df)})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    app.run(debug=True)
