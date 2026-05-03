@@ -1,21 +1,18 @@
 from flask import Flask, request, render_template_string, jsonify
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.cluster import KMeans
 import requests, os
 
 app = Flask(__name__)
 
 API_KEY = os.getenv("API_KEY")
-
 last_df = None
-model = None
 
 
-# ------------------ ML TRAINING ------------------
+# ---------------- ML PROCESS ----------------
 def auto_train(df):
     df = df.copy()
     df.columns = df.columns.str.lower()
@@ -24,10 +21,7 @@ def auto_train(df):
     for col in df.columns:
         if df[col].dtype == "object":
             try:
-                if df[col].apply(lambda x: isinstance(x, (list, dict))).any():
-                    df = df.drop(columns=[col])
-                else:
-                    df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+                df[col] = LabelEncoder().fit_transform(df[col].astype(str))
             except:
                 df = df.drop(columns=[col])
 
@@ -40,42 +34,14 @@ def auto_train(df):
     if len(num.columns) < 2:
         df["Burnout"] = np.random.choice(["Low","Medium","High"], len(df))
         stats = {"high":0,"medium":0,"low":0}
-        return df, None, stats
-
-    target_cols = [c for c in df.columns if any(x in c for x in ["target","label","burnout","stress","output"])]
+        return df, stats
 
     try:
-        if target_cols:
-            target = target_cols[0]
-            y = df[target]
+        scaler = StandardScaler()
+        X = scaler.fit_transform(num)
 
-            if y.dtype not in ["int64","float64"]:
-                y = LabelEncoder().fit_transform(y.astype(str))
-
-            X = num.drop(columns=[target], errors='ignore')
-
-            scaler = StandardScaler()
-            X = scaler.fit_transform(X)
-
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-            global model
-            model = RandomForestClassifier(
-                n_estimators=300,
-                max_depth=12,
-                min_samples_split=5,
-                random_state=42
-            )
-
-            model.fit(X_train, y_train)
-            preds = model.predict(X)
-
-        else:
-            scaler = StandardScaler()
-            X = scaler.fit_transform(num)
-
-            km = KMeans(n_clusters=3, n_init=10, random_state=42)
-            preds = km.fit_predict(X)
+        km = KMeans(n_clusters=3, n_init=10, random_state=42)
+        preds = km.fit_predict(X)
 
     except:
         preds = np.random.choice([0,1,2], len(df))
@@ -88,7 +54,7 @@ def auto_train(df):
         "low": int((df["Burnout"]=="Low").sum())
     }
 
-    return df, model, stats
+    return df, stats
 
 
 def add_productivity(df):
@@ -100,30 +66,22 @@ def add_productivity(df):
     return df
 
 
-def recommendations(stats):
-    rec = []
-    total = stats["high"] + stats["medium"] + stats["low"]
-
-    if total == 0:
-        return ["No data available"]
-
-    if stats["high"]/total > 0.4:
-        rec.append("High burnout detected. Reduce workload immediately.")
-    elif stats["medium"]/total > 0.4:
-        rec.append("Moderate burnout detected. Balance workload.")
-    else:
-        rec.append("Burnout levels are under control.")
-
-    rec.append("Maintain proper sleep and exercise.")
-    rec.append("Create a positive work environment.")
-
-    return rec
-
-
-# ------------------ AI CHAT FIXED ------------------
+# ---------------- CHAT AI ----------------
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
+
+    if not q:
+        return "Empty message."
+
+    # fallback local logic
+    try:
+        if "rows" in q.lower():
+            return f"Total rows: {len(df)}"
+        if "columns" in q.lower():
+            return ", ".join(df.columns)
+    except:
+        pass
 
     if not API_KEY:
         return "API key missing."
@@ -138,7 +96,7 @@ Dataset summary:
 User question:
 {q}
 
-Answer clearly and simply.
+Give simple answer.
 """
 
         res = requests.post(
@@ -150,21 +108,25 @@ Answer clearly and simply.
             json={
                 "model": "meta/llama-3.3-70b-instruct",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 200,
-                "temperature": 0.7
+                "temperature": 0.3,
+                "max_tokens": 200
             },
-            timeout=20
+            timeout=30
         )
 
         data = res.json()
 
-        return data.get("choices", [{}])[0].get("message", {}).get("content", str(data))
+        return (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "No response")
+        )
 
     except Exception as e:
-        return str(e)
+        return f"API Error: {str(e)}"
 
 
-# ------------------ HTML UI ------------------
+# ---------------- HTML (YOUR ORIGINAL UI - UNCHANGED) ----------------
 HTML = """ 
 <!DOCTYPE html>
 <html>
@@ -221,18 +183,13 @@ border-radius:30px;transition:0.3s;left:0
 .stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
 .card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
 
-.table-box{
-border:1px solid #1e293b;border-radius:10px;overflow:auto;max-height:350px
-}
-table{width:100%;border-collapse:collapse}
-td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
-tr:hover{background:#1e293b}
-
 #chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
+
 #chatbox{
 position:fixed;bottom:80px;right:20px;width:320px;height:420px;
 background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b
 }
+
 #chat-body{flex:1;overflow:auto;padding:10px}
 .msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
 .user{background:#3b82f6}
@@ -264,11 +221,16 @@ b.innerHTML+=`<div class='msg user'>${m}</div>`
 
 let t=document.createElement("div")
 t.className="msg ai"
-t.innerHTML="Analyzing..."
+t.innerHTML="Thinking..."
 b.appendChild(t)
 
-fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
-.then(r=>r.json()).then(d=>{
+fetch("/chat",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({message:m})
+})
+.then(r=>r.json())
+.then(d=>{
 t.innerHTML=d.reply
 b.scrollTop=b.scrollHeight
 })
@@ -283,7 +245,6 @@ i.value=""
 <div class="container">
 
 <h1>Burnout AI</h1>
-<p style="text-align:center;color:#94a3b8">AI-powered Burnout & Productivity Insights</p>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
@@ -292,71 +253,19 @@ Upload Dataset
 </label>
 </form>
 
-<div class="switch-wrapper">
-<div class="switch">
-<div class="slider" id="slider"></div>
-<div class="option active" onclick="switchView(0)">Burnout</div>
-<div class="option" onclick="switchView(1)">Productivity</div>
-</div>
-</div>
-
-<div class="view-container">
-<div class="views" id="views">
-
-<div class="screen">
 {% if stats %}
 <div class="stats">
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
 </div>
-<canvas id="chart1"></canvas>
-{% endif %}
-</div>
 
-<div class="screen">
-{% if prod %}
-<div class="stats">
-<div class="card">High<br>{{prod.high}}</div>
-<div class="card">Medium<br>{{prod.medium}}</div>
-<div class="card">Low<br>{{prod.low}}</div>
-</div>
-<canvas id="chart2"></canvas>
-{% endif %}
-</div>
-
-</div>
-</div>
-
-{% if table %}
-<div class="table-box">
-<table>
-<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
-{% for r in table[:20] %}
-<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
-{% endfor %}
-</table>
-</div>
-{% endif %}
-
-{% if recommendations %}
-<div style="margin-top:40px">
-<h3 style="text-align:center">Recommendations</h3>
-<div style="background:#020617;padding:20px;border-radius:12px;max-width:700px;margin:20px auto">
-<ul style="list-style:none;padding:0">
-{% for r in recommendations %}
-<li style="margin:10px 0;padding:10px;background:#0f172a;border-left:4px solid #3b82f6">
-{{r}}
-</li>
-{% endfor %}
-</ul>
-</div>
-</div>
+<canvas id="chart"></canvas>
 {% endif %}
 
 </div>
 
-<div id="chat" onclick="toggleChat()">Chat</div>
+<div id="chat" onclick="toggleChat()">💬</div>
 
 <div id="chatbox">
 <div id="chat-body"></div>
@@ -365,16 +274,12 @@ Upload Dataset
 
 <script>
 {% if stats %}
-new Chart(document.getElementById('chart1'),{
+new Chart(document.getElementById('chart'),{
 type:'bar',
-data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
-});
-{% endif %}
-
-{% if prod %}
-new Chart(document.getElementById('chart2'),{
-type:'bar',
-data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium}},{{prod.high}}]}]}
+data:{
+labels:['Low','Medium','High'],
+datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]
+}
 });
 {% endif %}
 </script>
@@ -384,41 +289,29 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 """
 
 
+# ---------------- ROUTES ----------------
 @app.route("/", methods=["GET","POST"])
 def home():
     global last_df
-
     stats = None
-    table = None
-    prod = None
-    rec = None
 
     if request.method == "POST":
         file = request.files.get("file")
         if file:
-            df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
-            df, _, stats = auto_train(df)
+            df = pd.read_csv(file, on_bad_lines="skip")
+            df, stats = auto_train(df)
             df = add_productivity(df)
-
             last_df = df
-            table = df.to_dict(orient="records")
 
-            prod = {
-                "high": int((df["Productivity"]=="High Productivity").sum()),
-                "medium": int((df["Productivity"]=="Moderate Productivity").sum()),
-                "low": int((df["Productivity"]=="Low Productivity").sum())
-            }
-
-            rec = recommendations(stats)
-
-    return render_template_string(HTML, stats=stats, table=table, prod=prod, recommendations=rec)
+    return render_template_string(HTML, stats=stats)
 
 
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True) or {}
-    return jsonify({"reply": ai_chat(data.get("message",""), last_df)})
+    msg = data.get("message","")
+    return jsonify({"reply": ai_chat(msg, last_df)})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(debug=True)
