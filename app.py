@@ -15,7 +15,6 @@ last_df = None
 model = None
 
 
-# ================= ML PIPELINE =================
 def auto_train(df):
     df = df.copy()
     df.columns = df.columns.str.lower()
@@ -38,18 +37,18 @@ def auto_train(df):
     num = df.select_dtypes(include=np.number)
 
     if len(num.columns) < 2:
-        df["Burnout"] = np.random.choice(["Low", "Medium", "High"], len(df))
-        stats = {"high": 0, "medium": 0, "low": 0}
+        df["Burnout"] = np.random.choice(["Low","Medium","High"], len(df))
+        stats = {"high":0,"medium":0,"low":0}
         return df, None, stats
 
-    target_cols = [c for c in df.columns if any(x in c for x in ["target", "label", "burnout", "stress", "output"])]
+    target_cols = [c for c in df.columns if any(x in c for x in ["target","label","burnout","stress","output"])]
 
     try:
         if target_cols:
             target = target_cols[0]
             y = df[target]
 
-            if y.dtype not in ["int64", "float64"]:
+            if y.dtype not in ["int64","float64"]:
                 y = LabelEncoder().fit_transform(y.astype(str))
 
             X = num.drop(columns=[target], errors='ignore')
@@ -57,7 +56,7 @@ def auto_train(df):
             scaler = StandardScaler()
             X = scaler.fit_transform(X)
 
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
 
             global model
             model = RandomForestClassifier(
@@ -67,7 +66,7 @@ def auto_train(df):
                 random_state=42
             )
 
-            model.fit(X_train, y_train)
+            model.fit(X_train,y_train)
             preds = model.predict(X)
 
         else:
@@ -78,14 +77,14 @@ def auto_train(df):
             preds = km.fit_predict(X)
 
     except:
-        preds = np.random.choice([0, 1, 2], len(df))
+        preds = np.random.choice([0,1,2], len(df))
 
-    df["Burnout"] = ["Low" if i == 0 else "Medium" if i == 1 else "High" for i in preds]
+    df["Burnout"] = ["Low" if i==0 else "Medium" if i==1 else "High" for i in preds]
 
     stats = {
-        "high": int((df["Burnout"] == "High").sum()),
-        "medium": int((df["Burnout"] == "Medium").sum()),
-        "low": int((df["Burnout"] == "Low").sum())
+        "high": int((df["Burnout"]=="High").sum()),
+        "medium": int((df["Burnout"]=="Medium").sum()),
+        "low": int((df["Burnout"]=="Low").sum())
     }
 
     return df, model, stats
@@ -108,26 +107,45 @@ def recommendations(stats):
     if total == 0:
         return ["No data available"]
 
-    if stats["high"] / total > 0.4:
+    if stats["high"]/total > 0.4:
         rec.append("High burnout detected. Immediate workload reduction needed.")
-    elif stats["medium"] / total > 0.4:
-        rec.append("Moderate burnout detected. Monitor workload.")
+    elif stats["medium"]/total > 0.4:
+        rec.append("Moderate burnout detected. Monitor and balance workload.")
     else:
         rec.append("Burnout levels are under control.")
 
-    rec.append("Encourage proper sleep and physical activity.")
-    rec.append("Maintain work-life balance.")
+    rec.append("Encourage proper sleep and regular physical activity.")
+    rec.append("Promote a supportive and positive work environment.")
 
     return rec
 
 
-# ================= CHATBOT =================
+def smart_answer(q, df):
+    q = q.lower()
+    try:
+        if "average" in q or "mean" in q:
+            return df.mean(numeric_only=True).to_string()
+        if "correlation" in q:
+            return df.corr(numeric_only=True).to_string()
+        if "rows" in q:
+            return str(len(df))
+        if "columns" in q:
+            return ", ".join(df.columns)
+        if "burnout" in q:
+            return df["Burnout"].value_counts().to_string()
+    except:
+        return None
+    return None
+
+
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
 
     if not API_KEY:
         return "API key missing."
+
+    local = smart_answer(q, df)
 
     try:
         summary = df.describe().to_string()
@@ -154,18 +172,20 @@ User question:
             timeout=20
         )
 
-        data = res.json()
+        try:
+            data = res.json()
+        except:
+            return "AI response error"
 
-        if "choices" not in data:
-            return str(data)
+        if isinstance(data, dict) and "choices" in data:
+            return data["choices"][0]["message"]["content"]
 
-        return data["choices"][0]["message"]["content"]
+        return local or str(data)
 
     except Exception as e:
         return str(e)
 
 
-# ================= YOUR ORIGINAL HTML (UNCHANGED) =================
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -175,41 +195,49 @@ HTML = """
 
 <style>
 body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
-.container{max-width:1100px;margin:auto;padding:30px;animation:fadeIn 0.5s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-h1{text-align:center;margin-bottom:10px}
-.upload{display:block;max-width:600px;margin:0 auto 30px;padding:50px;border:2px dashed #3b82f6;border-radius:12px;text-align:center;cursor:pointer;transition:0.3s}
-.upload:hover{transform:scale(1.02);background:#020617}
-.switch-wrapper{display:flex;justify-content:center;margin-bottom:25px}
-.switch{position:relative;width:260px;height:45px;background:#020617;border-radius:30px;display:flex;align-items:center;overflow:hidden}
-.option{flex:1;text-align:center;z-index:2;cursor:pointer;color:#94a3b8}
-.option.active{color:white;font-weight:600}
-.slider{position:absolute;width:50%;height:100%;background:#3b82f6;border-radius:30px;transition:0.3s;left:0}
+.container{max-width:1100px;margin:auto;padding:30px}
+
+h1{text-align:center}
+
+.upload{
+display:block;
+max-width:600px;
+margin:0 auto;
+padding:50px;
+border:2px dashed #3b82f6;
+border-radius:12px;
+text-align:center;
+cursor:pointer;
+}
+
+.switch-wrapper{display:flex;justify-content:center;margin:20px 0}
+.switch{position:relative;width:260px;height:45px;background:#020617;border-radius:30px;display:flex}
+.option{flex:1;text-align:center;cursor:pointer;color:#94a3b8}
+.option.active{color:white}
+.slider{position:absolute;width:50%;height:100%;background:#3b82f6;border-radius:30px;left:0}
+
 .view-container{overflow:hidden}
-.views{display:flex;width:200%;transition:transform 0.4s ease}
+.views{display:flex;width:200%}
 .screen{width:100%}
-.stats{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-bottom:20px}
+
+.stats{display:flex;justify-content:center;gap:20px}
 .card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
-.table-box{border:1px solid #1e293b;border-radius:10px;overflow:auto;max-height:350px}
-table{width:100%;border-collapse:collapse}
-td,th{padding:10px;border-bottom:1px solid #1e293b;text-align:center}
-tr:hover{background:#1e293b}
-#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%;cursor:pointer}
-#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column;border-radius:10px;border:1px solid #1e293b}
+
+#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:14px;border-radius:50%}
+#chatbox{position:fixed;bottom:80px;right:20px;width:320px;height:420px;background:#020617;display:none;flex-direction:column}
 #chat-body{flex:1;overflow:auto;padding:10px}
-.msg{margin:6px;padding:8px;border-radius:6px;font-size:13px}
+.msg{margin:6px;padding:8px;border-radius:6px}
 .user{background:#3b82f6}
 .ai{background:#1e293b}
 </style>
 
 <script>
-function switchView(index){
-document.getElementById("views").style.transform=`translateX(-${index*50}%)`
-let slider=document.getElementById("slider")
-slider.style.left=index===0?"0%":"50%"
-let options=document.querySelectorAll(".option")
-options.forEach(o=>o.classList.remove("active"))
-options[index].classList.add("active")
+function switchView(i){
+document.getElementById("views").style.transform=`translateX(-${i*50}%)`
+document.getElementById("slider").style.left=i===0?"0%":"50%"
+document.querySelectorAll(".option").forEach((o,idx)=>{
+o.classList.toggle("active",idx===i)
+})
 }
 
 function toggleChat(){
@@ -221,8 +249,10 @@ function sendMessage(){
 let i=document.getElementById("chat_text")
 let m=i.value.trim()
 if(!m)return
+
 let b=document.getElementById("chat-body")
 b.innerHTML+=`<div class='msg user'>${m}</div>`
+
 let t=document.createElement("div")
 t.className="msg ai"
 t.innerHTML="Analyzing..."
@@ -231,7 +261,6 @@ b.appendChild(t)
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
 .then(r=>r.json()).then(d=>{
 t.innerHTML=d.reply
-b.scrollTop=b.scrollHeight
 })
 i.value=""
 }
@@ -239,11 +268,9 @@ i.value=""
 </head>
 
 <body>
-
 <div class="container">
 
 <h1>Burnout AI</h1>
-<p style="text-align:center;color:#94a3b8">AI-powered Burnout & Productivity Insights</p>
 
 <form method="POST" enctype="multipart/form-data">
 <label class="upload">
@@ -251,6 +278,8 @@ Upload Dataset
 <input type="file" name="file" hidden onchange="this.form.submit()">
 </label>
 </form>
+
+{% if stats %}
 
 <div class="switch-wrapper">
 <div class="switch">
@@ -264,63 +293,32 @@ Upload Dataset
 <div class="views" id="views">
 
 <div class="screen">
-{% if stats %}
 <div class="stats">
 <div class="card">High<br>{{stats.high}}</div>
 <div class="card">Medium<br>{{stats.medium}}</div>
 <div class="card">Low<br>{{stats.low}}</div>
 </div>
 <canvas id="chart1"></canvas>
-{% endif %}
 </div>
 
 <div class="screen">
-{% if prod %}
 <div class="stats">
 <div class="card">High<br>{{prod.high}}</div>
 <div class="card">Medium<br>{{prod.medium}}</div>
 <div class="card">Low<br>{{prod.low}}</div>
 </div>
 <canvas id="chart2"></canvas>
+</div>
+
+</div>
+</div>
+
 {% endif %}
-</div>
-
-</div>
-</div>
-
-{% if table %}
-<div class="table-box">
-<table>
-<tr>{% for k in table[0].keys() %}<th>{{k}}</th>{% endfor %}</tr>
-{% for r in table[:20] %}
-<tr>{% for v in r.values() %}<td>{{v}}</td>{% endfor %}</tr>
-{% endfor %}
-</table>
-</div>
-{% endif %}
-
-{% if recommendations %}
-<div style="margin-top:40px">
-<h3 style="text-align:center">Recommendations</h3>
-<div style="background:#020617;padding:20px;border-radius:12px;max-width:700px;margin:20px auto">
-<ul style="list-style:none;padding:0">
-{% for r in recommendations %}
-<li style="margin:10px 0;padding:10px;background:#0f172a;border-left:4px solid #3b82f6">
-{{r}}
-</li>
-{% endfor %}
-</ul>
-</div>
-</div>
-{% endif %}
-
-</div>
 
 <div id="chat" onclick="toggleChat()">Chat</div>
-
 <div id="chatbox">
 <div id="chat-body"></div>
-<input id="chat_text" placeholder="Ask..." onkeydown="if(event.key==='Enter'){sendMessage()}">
+<input id="chat_text" onkeydown="if(event.key==='Enter'){sendMessage()}">
 </div>
 
 <script>
@@ -329,9 +327,7 @@ new Chart(document.getElementById('chart1'),{
 type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{stats.low}},{{stats.medium}},{{stats.high}}]}]}
 });
-{% endif %}
 
-{% if prod %}
 new Chart(document.getElementById('chart2'),{
 type:'bar',
 data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium}},{{prod.high}}]}]}
@@ -339,45 +335,44 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 {% endif %}
 </script>
 
+</div>
 </body>
 </html>
 """
 
-# ================= ROUTES =================
-@app.route("/", methods=["GET", "POST"])
+
+@app.route("/",methods=["GET","POST"])
 def home():
     global last_df
+    stats=None
+    table=None
+    prod=None
+    rec=None
 
-    stats = {"high": 0, "medium": 0, "low": 0}
-    table = []
-    prod = {}
-    rec = []
-
-    if request.method == "POST":
-        file = request.files.get("file")
+    if request.method=="POST":
+        file=request.files.get("file")
         if file:
             df = pd.read_csv(file, encoding='utf-8', on_bad_lines='skip')
-            df, _, stats = auto_train(df)
-            df = add_productivity(df)
-            last_df = df
-            table = df.to_dict(orient="records")
+            df,_,stats=auto_train(df)
+            df=add_productivity(df)
+            last_df=df
 
             if "Productivity" in df.columns:
-                prod = {
-                    "high": int((df["Productivity"] == "High Productivity").sum()),
-                    "medium": int((df["Productivity"] == "Moderate Productivity").sum()),
-                    "low": int((df["Productivity"] == "Low Productivity").sum())
+                prod={
+                    "high":int((df["Productivity"]=="High Productivity").sum()),
+                    "medium":int((df["Productivity"]=="Moderate Productivity").sum()),
+                    "low":int((df["Productivity"]=="Low Productivity").sum())
                 }
 
-            rec = recommendations(stats)
+            rec=recommendations(stats)
 
-    return render_template_string(HTML, stats=stats, table=table, prod=prod, recommendations=rec)
+    return render_template_string(HTML,stats=stats,prod=prod,recommendations=rec)
 
 
-@app.route("/chat", methods=["POST"])
+@app.route("/chat",methods=["POST"])
 def chat():
-    return jsonify({"reply": ai_chat(request.get_json()["message"], last_df)})
+    return jsonify({"reply":ai_chat(request.get_json()["message"],last_df)})
 
 
-if __name__ == "__main__":
+if __name__=="__main__":
     app.run(debug=True)
