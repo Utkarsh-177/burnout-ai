@@ -31,18 +31,18 @@ def auto_train(df):
     num = df.select_dtypes(include=np.number)
 
     if len(num.columns) < 2:
-        df["Burnout"] = np.random.choice(["Low", "Medium", "High"], len(df))
+        df["Burnout"] = np.random.choice(["Low","Medium","High"], len(df))
     else:
         scaler = StandardScaler()
         X = scaler.fit_transform(num)
         km = KMeans(n_clusters=3, n_init=10, random_state=42)
         preds = km.fit_predict(X)
-        df["Burnout"] = ["Low" if i == 0 else "Medium" if i == 1 else "High" for i in preds]
+        df["Burnout"] = ["Low" if i==0 else "Medium" if i==1 else "High" for i in preds]
 
     stats = {
-        "high": int((df["Burnout"] == "High").sum()),
-        "medium": int((df["Burnout"] == "Medium").sum()),
-        "low": int((df["Burnout"] == "Low").sum())
+        "high": int((df["Burnout"]=="High").sum()),
+        "medium": int((df["Burnout"]=="Medium").sum()),
+        "low": int((df["Burnout"]=="Low").sum())
     }
 
     return df, stats
@@ -57,19 +57,20 @@ def add_productivity(df):
     return df
 
 
-def generate_recommendations(stats):
+def recommendations(stats):
     rec = []
     total = sum(stats.values())
 
-    if stats["high"] / total > 0.4:
-        rec.append("Critical burnout levels detected. Reduce workload immediately.")
-    elif stats["medium"] / total > 0.4:
-        rec.append("Moderate burnout. Improve work-life balance.")
+    if stats["high"]/total > 0.4:
+        rec.append("Critical burnout detected. Immediate intervention required.")
+    elif stats["medium"]/total > 0.4:
+        rec.append("Moderate burnout observed. Improve balance and reduce overload.")
     else:
-        rec.append("Healthy burnout levels observed.")
+        rec.append("Burnout levels are stable.")
 
-    rec.append("Ensure structured breaks and proper sleep cycles.")
-    rec.append("Encourage productivity tracking and goal clarity.")
+    rec.append("Maintain consistent sleep schedule.")
+    rec.append("Encourage breaks and physical activity.")
+    rec.append("Use productivity tracking for performance improvement.")
 
     return rec
 
@@ -78,9 +79,6 @@ def generate_recommendations(stats):
 def ai_chat(q, df):
     if df is None:
         return "Upload dataset first."
-
-    if not API_KEY:
-        return "API key missing."
 
     try:
         summary = df.describe().to_string()
@@ -107,10 +105,10 @@ def ai_chat(q, df):
         return data["choices"][0]["message"]["content"]
 
     except Exception as e:
-        return str(e)
+        return f"Error: {str(e)}"
 
 
-# ---------------- HTML (MODERN UI FIXED) ----------------
+# ---------------- HTML (PRO UI) ----------------
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -123,7 +121,7 @@ body{margin:0;font-family:system-ui;background:#0f172a;color:#e2e8f0}
 
 .container{max-width:1100px;margin:auto;padding:30px}
 
-h1{text-align:center}
+h1{text-align:center;margin-bottom:10px}
 
 .upload{
 display:block;
@@ -138,29 +136,114 @@ transition:0.3s;
 }
 .upload:hover{transform:scale(1.03);background:#020617}
 
-.switch{display:flex;width:300px;margin:20px auto;background:#020617;border-radius:30px}
-.option{flex:1;text-align:center;padding:10px;cursor:pointer}
-.option.active{background:#3b82f6;border-radius:30px}
+.switch-wrapper{display:flex;justify-content:center;margin:25px 0}
 
-.stats{display:flex;justify-content:center;gap:20px;margin:20px}
-.card{background:#020617;padding:15px;border-radius:10px;width:120px;text-align:center}
+.switch{
+position:relative;
+width:280px;
+height:45px;
+background:#020617;
+border-radius:30px;
+display:flex;
+align-items:center;
+overflow:hidden;
+}
 
-.table-box{max-height:300px;overflow:auto;margin-top:20px;border:1px solid #1e293b}
+.option{
+flex:1;
+text-align:center;
+z-index:2;
+cursor:pointer;
+color:#94a3b8;
+transition:0.3s;
+}
+
+.option.active{
+color:white;
+font-weight:600;
+}
+
+.slider{
+position:absolute;
+width:50%;
+height:100%;
+background:#3b82f6;
+border-radius:30px;
+transition:all 0.35s ease;
+left:0;
+}
+
+.view-container{overflow:hidden}
+
+.views{
+display:flex;
+width:200%;
+transition:transform 0.45s cubic-bezier(0.4,0,0.2,1);
+}
+
+.screen{width:100%}
+
+.stats{display:flex;justify-content:center;gap:20px;margin-bottom:20px}
+
+.card{background:#020617;padding:15px;border-radius:10px;width:140px;text-align:center}
+
+.table-box{
+max-height:300px;
+overflow:auto;
+margin-top:20px;
+border:1px solid #1e293b;
+border-radius:10px
+}
+
 table{width:100%}
 td,th{padding:8px;text-align:center}
 
-button{padding:10px;margin:10px;background:#3b82f6;border:none;border-radius:6px;cursor:pointer}
+button{
+padding:10px 15px;
+background:#3b82f6;
+border:none;
+border-radius:6px;
+cursor:pointer;
+transition:0.3s;
+}
 button:hover{transform:scale(1.05)}
 
-#chat{position:fixed;bottom:20px;right:20px;background:#3b82f6;padding:15px;border-radius:50%}
-#chatbox{position:fixed;bottom:80px;right:20px;width:300px;height:400px;background:#020617;display:none;flex-direction:column}
+#chat{
+position:fixed;
+bottom:20px;
+right:20px;
+background:#3b82f6;
+padding:14px;
+border-radius:50%;
+cursor:pointer
+}
+
+#chatbox{
+position:fixed;
+bottom:80px;
+right:20px;
+width:320px;
+height:420px;
+background:#020617;
+display:none;
+flex-direction:column;
+border-radius:10px;
+border:1px solid #1e293b
+}
+
 #chat-body{flex:1;overflow:auto;padding:10px}
 </style>
 
 <script>
-function switchView(type){
-document.getElementById("burnout").style.display = type==="burnout"?"block":"none"
-document.getElementById("prod").style.display = type==="prod"?"block":"none"
+function switchView(index){
+document.getElementById("views").style.transform=`translateX(-${index*50}%)`
+
+let slider=document.getElementById("slider")
+slider.style.left=index===0?"0%":"50%"
+
+let options=document.querySelectorAll(".option")
+options.forEach(o=>o.classList.remove("active"))
+options[index].classList.add("active")
 }
 
 function toggleChat(){
@@ -179,6 +262,7 @@ b.innerHTML+=`<div>${m}</div>`
 fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:m})})
 .then(r=>r.json()).then(d=>{
 b.innerHTML+=`<div>${d.reply}</div>`
+b.scrollTop=b.scrollHeight
 })
 
 i.value=""
@@ -199,31 +283,40 @@ Upload Dataset
 </label>
 </form>
 
+<div class="switch-wrapper">
 <div class="switch">
-<div class="option active" onclick="switchView('burnout')">Burnout</div>
-<div class="option" onclick="switchView('prod')">Productivity</div>
+<div class="slider" id="slider"></div>
+<div class="option active" onclick="switchView(0)">Burnout</div>
+<div class="option" onclick="switchView(1)">Productivity</div>
+</div>
 </div>
 
-<div id="burnout">
+<div class="view-container">
+<div class="views" id="views">
+
+<div class="screen">
 {% if stats %}
 <div class="stats">
-<div class="card">High {{stats.high}}</div>
-<div class="card">Medium {{stats.medium}}</div>
-<div class="card">Low {{stats.low}}</div>
+<div class="card">High<br>{{stats.high}}</div>
+<div class="card">Medium<br>{{stats.medium}}</div>
+<div class="card">Low<br>{{stats.low}}</div>
 </div>
 <canvas id="chart1"></canvas>
 {% endif %}
 </div>
 
-<div id="prod" style="display:none">
+<div class="screen">
 {% if prod %}
 <div class="stats">
-<div class="card">High {{prod.high}}</div>
-<div class="card">Medium {{prod.medium}}</div>
-<div class="card">Low {{prod.low}}</div>
+<div class="card">High<br>{{prod.high}}</div>
+<div class="card">Medium<br>{{prod.medium}}</div>
+<div class="card">Low<br>{{prod.low}}</div>
 </div>
 <canvas id="chart2"></canvas>
 {% endif %}
+</div>
+
+</div>
 </div>
 
 {% if table %}
@@ -238,7 +331,7 @@ Upload Dataset
 {% endif %}
 
 {% if recommendations %}
-<div>
+<div style="margin-top:40px">
 <h3>Recommendations</h3>
 <ul>
 {% for r in recommendations %}
@@ -248,8 +341,14 @@ Upload Dataset
 </div>
 {% endif %}
 
+{% if stats %}
+<div style="display:flex;justify-content:space-between;margin-top:30px">
+<div>
 <a href="/download/burnout"><button>Download Burnout Report</button></a>
 <a href="/download/productivity"><button>Download Productivity Report</button></a>
+</div>
+</div>
+{% endif %}
 
 </div>
 
@@ -282,39 +381,38 @@ data:{labels:['Low','Medium','High'],datasets:[{data:[{{prod.low}},{{prod.medium
 
 
 # ---------------- ROUTES ----------------
-@app.route("/", methods=["GET","POST"])
+@app.route("/",methods=["GET","POST"])
 def home():
     global last_df
-    stats = None
-    table = None
-    prod = None
-    rec = None
+    stats=None
+    table=None
+    prod=None
+    rec=None
 
-    if request.method == "POST":
-        file = request.files.get("file")
+    if request.method=="POST":
+        file=request.files.get("file")
         if file:
-            df = pd.read_csv(file, on_bad_lines="skip")
-            df, stats = auto_train(df)
-            df = add_productivity(df)
-            last_df = df
+            df=pd.read_csv(file,on_bad_lines="skip")
+            df,stats=auto_train(df)
+            df=add_productivity(df)
+            last_df=df
 
-            table = df.to_dict(orient="records")
+            table=df.to_dict(orient="records")
 
-            prod = {
-                "high": int((df["Productivity"]=="High Productivity").sum()),
-                "medium": int((df["Productivity"]=="Moderate Productivity").sum()),
-                "low": int((df["Productivity"]=="Low Productivity").sum())
+            prod={
+                "high":int((df["Productivity"]=="High Productivity").sum()),
+                "medium":int((df["Productivity"]=="Moderate Productivity").sum()),
+                "low":int((df["Productivity"]=="Low Productivity").sum())
             }
 
-            rec = generate_recommendations(stats)
+            rec=recommendations(stats)
 
-    return render_template_string(HTML, stats=stats, table=table, prod=prod, recommendations=rec)
+    return render_template_string(HTML,stats=stats,table=table,prod=prod,recommendations=rec)
 
 
-@app.route("/chat", methods=["POST"])
+@app.route("/chat",methods=["POST"])
 def chat():
-    msg = request.get_json().get("message")
-    return jsonify({"reply": ai_chat(msg, last_df)})
+    return jsonify({"reply":ai_chat(request.get_json()["message"],last_df)})
 
 
 @app.route("/download/<type>")
@@ -324,14 +422,14 @@ def download(type):
 
     output = io.StringIO()
 
-    if type == "burnout":
-        last_df[["Burnout"]].to_csv(output, index=False)
+    if type=="burnout":
+        last_df[["Burnout"]].to_csv(output,index=False)
     else:
-        last_df[["Productivity"]].to_csv(output, index=False)
+        last_df[["Productivity"]].to_csv(output,index=False)
 
     output.seek(0)
-    return send_file(io.BytesIO(output.getvalue().encode()), download_name=f"{type}.csv", as_attachment=True)
+    return send_file(io.BytesIO(output.getvalue().encode()),download_name=f"{type}.csv",as_attachment=True)
 
 
-if __name__ == "__main__":
+if __name__=="__main__":
     app.run(debug=True)
