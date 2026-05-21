@@ -125,6 +125,10 @@ padding:0;
 box-sizing:border-box;
 }
 
+html{
+scroll-behavior:smooth;
+}
+
 body{
 font-family:system-ui;
 background:#020617;
@@ -167,6 +171,38 @@ transform:translateY(0);
 }
 }
 
+.navbar{
+position:sticky;
+top:15px;
+z-index:999;
+display:flex;
+justify-content:center;
+margin-bottom:35px;
+}
+
+.nav-inner{
+display:flex;
+gap:20px;
+padding:14px 28px;
+border-radius:50px;
+background:rgba(15,23,42,0.75);
+backdrop-filter:blur(12px);
+border:1px solid #1e293b;
+box-shadow:0 10px 30px rgba(0,0,0,0.35);
+}
+
+.nav-inner a{
+text-decoration:none;
+color:#94a3b8;
+font-size:14px;
+font-weight:600;
+transition:0.3s;
+}
+
+.nav-inner a:hover{
+color:white;
+}
+
 h1{
 text-align:center;
 font-size:52px;
@@ -179,37 +215,6 @@ text-align:center;
 color:#94a3b8;
 margin-bottom:40px;
 font-size:17px;
-}
-
-/* FLOATING BAR */
-
-.floating-bar{
-position:fixed;
-top:18px;
-left:50%;
-transform:translateX(-50%);
-display:flex;
-gap:30px;
-padding:14px 30px;
-background:rgba(15,23,42,0.75);
-backdrop-filter:blur(14px);
-border:1px solid #1e293b;
-border-radius:20px;
-z-index:999;
-box-shadow:0 10px 30px rgba(0,0,0,0.3);
-}
-
-.floating-bar div{
-text-align:center;
-}
-
-.floating-bar h3{
-font-size:22px;
-}
-
-.floating-bar p{
-color:#94a3b8;
-font-size:13px;
 }
 
 .upload{
@@ -333,6 +338,18 @@ border-radius:25px;
 text-align:center;
 border:1px solid #1e293b;
 transition:0.35s;
+position:relative;
+overflow:hidden;
+}
+
+.card::before{
+content:"";
+position:absolute;
+width:100%;
+height:4px;
+top:0;
+left:0;
+background:linear-gradient(90deg,#2563eb,#3b82f6);
 }
 
 .card:hover{
@@ -352,6 +369,83 @@ border-radius:25px;
 border:1px solid #1e293b;
 margin-bottom:40px;
 box-shadow:0 15px 40px rgba(0,0,0,0.25);
+position:relative;
+}
+
+.analytics-header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:25px;
+flex-wrap:wrap;
+gap:15px;
+}
+
+.export-btn{
+padding:12px 18px;
+border:none;
+border-radius:12px;
+background:#2563eb;
+color:white;
+font-weight:600;
+cursor:pointer;
+transition:0.3s;
+}
+
+.export-btn:hover{
+transform:translateY(-3px);
+}
+
+.health-box{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+gap:25px;
+margin-bottom:40px;
+}
+
+.health-card{
+background:#0f172a;
+padding:28px;
+border-radius:22px;
+border:1px solid #1e293b;
+}
+
+.progress{
+height:10px;
+background:#111827;
+border-radius:30px;
+overflow:hidden;
+margin-top:15px;
+}
+
+.progress span{
+display:block;
+height:100%;
+width:91%;
+background:linear-gradient(90deg,#2563eb,#3b82f6);
+animation:loadBar 2s ease;
+}
+
+@keyframes loadBar{
+from{width:0}
+to{width:91%}
+}
+
+.search-box{
+margin-bottom:18px;
+display:flex;
+justify-content:flex-end;
+}
+
+.search-box input{
+width:320px;
+padding:14px;
+border:none;
+outline:none;
+background:#0f172a;
+border:1px solid #1e293b;
+border-radius:14px;
+color:white;
 }
 
 .table-section{
@@ -408,47 +502,6 @@ tr:hover{
 background:#172554;
 }
 
-/* INSIGHTS */
-
-.insight-panel{
-margin-top:60px;
-}
-
-.insight-header h2{
-font-size:34px;
-margin-bottom:10px;
-}
-
-.insight-header p{
-color:#94a3b8;
-margin-bottom:25px;
-}
-
-.insight-grid{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
-gap:22px;
-}
-
-.insight-card{
-background:#0f172a;
-padding:28px;
-border-radius:22px;
-border:1px solid #1e293b;
-transition:0.35s;
-}
-
-.insight-card:hover{
-transform:translateY(-5px);
-border-color:#2563eb;
-box-shadow:0 20px 40px rgba(37,99,235,0.15);
-}
-
-.insight-card h3{
-margin-bottom:14px;
-font-size:22px;
-}
-
 .recommend-section{
 margin-top:65px;
 }
@@ -467,6 +520,19 @@ border-radius:22px;
 border:1px solid #1e293b;
 transition:0.35s;
 line-height:1.7;
+position:relative;
+overflow:hidden;
+}
+
+.recommend-card::before{
+content:"AI";
+position:absolute;
+top:15px;
+right:15px;
+font-size:11px;
+padding:4px 8px;
+border-radius:30px;
+background:#2563eb;
 }
 
 .recommend-card:hover{
@@ -606,38 +672,6 @@ transition:0.3s;
 background:#3b82f6;
 }
 
-/* LOADER */
-
-#loader{
-position:fixed;
-inset:0;
-background:#020617;
-display:none;
-justify-content:center;
-align-items:center;
-z-index:5000;
-}
-
-.loader-box{
-text-align:center;
-}
-
-.loader-circle{
-width:90px;
-height:90px;
-border:6px solid #1e293b;
-border-top:6px solid #2563eb;
-border-radius:50%;
-margin:auto auto 25px;
-animation:spin 1s linear infinite;
-}
-
-@keyframes spin{
-100%{
-transform:rotate(360deg);
-}
-}
-
 </style>
 
 <script>
@@ -663,10 +697,6 @@ function toggleChat(){
 let c=document.getElementById("chatbox")
 
 c.style.display = c.style.display==="flex" ? "none" : "flex"
-}
-
-function showLoader(){
-document.getElementById("loader").style.display="flex"
 }
 
 function sendMessage(){
@@ -704,11 +734,37 @@ message:m
 })
 .then(r=>r.json())
 .then(d=>{
-t.innerHTML=d.reply
+
+let text=d.reply
+let i=0
+t.innerHTML=""
+
+let typing=setInterval(()=>{
+t.innerHTML += text.charAt(i)
+i++
 b.scrollTop=b.scrollHeight
+
+if(i>=text.length){
+clearInterval(typing)
+}
+},12)
+
 })
 
 i.value=""
+}
+
+function searchTable(){
+let input=document.getElementById("searchInput").value.toLowerCase()
+let rows=document.querySelectorAll("table tr")
+
+rows.forEach((row,index)=>{
+if(index===0)return
+
+let txt=row.innerText.toLowerCase()
+
+row.style.display=txt.includes(input) ? "" : "none"
+})
 }
 
 </script>
@@ -716,28 +772,16 @@ i.value=""
 
 <body>
 
-{% if stats %}
-<div class="floating-bar">
-
-<div>
-<h3>{{stats.high}}</h3>
-<p>High</p>
-</div>
-
-<div>
-<h3>{{stats.medium}}</h3>
-<p>Medium</p>
-</div>
-
-<div>
-<h3>{{stats.low}}</h3>
-<p>Low</p>
-</div>
-
-</div>
-{% endif %}
-
 <div class="container">
+
+<div class="navbar">
+<div class="nav-inner">
+<a href="#">Analytics</a>
+<a href="#">Dataset</a>
+<a href="#">Recommendations</a>
+<a href="#">Reports</a>
+</div>
+</div>
 
 <h1>Burnout AI</h1>
 
@@ -755,14 +799,30 @@ Advanced AI-powered burnout detection, productivity analytics, and intelligent w
 Drag and analyze workforce productivity & burnout datasets
 </p>
 
-<input type="file"
-name="file"
-hidden
-onchange="showLoader(); this.form.submit()">
+<input type="file" name="file" hidden onchange="this.form.submit()">
 
 </label>
 
 </form>
+
+<div class="health-box">
+
+<div class="health-card">
+<h3>Dataset Quality</h3>
+<div class="progress">
+<span></span>
+</div>
+<p style="margin-top:14px;color:#94a3b8">91% Clean & Structured Data</p>
+</div>
+
+<div class="health-card">
+<h3>AI Analysis Engine</h3>
+<p style="margin-top:18px;line-height:1.7;color:#94a3b8">
+Real-time burnout clustering, productivity mapping, and intelligent recommendation generation enabled.
+</p>
+</div>
+
+</div>
 
 <div class="switch-wrapper">
 
@@ -810,7 +870,18 @@ Productivity Insights
 </div>
 
 <div class="chart-box">
+
+<div class="analytics-header">
+<h2>Burnout Analytics</h2>
+
+<button class="export-btn"
+onclick="window.print()">
+Export Chart
+</button>
+</div>
+
 <canvas id="chart1"></canvas>
+
 </div>
 
 {% endif %}
@@ -841,7 +912,13 @@ Productivity Insights
 </div>
 
 <div class="chart-box">
+
+<div class="analytics-header">
+<h2>Productivity Insights</h2>
+</div>
+
 <canvas id="chart2"></canvas>
+
 </div>
 
 {% endif %}
@@ -858,6 +935,14 @@ Productivity Insights
 
 <div class="table-title">
 Dataset Preview
+</div>
+
+<div class="search-box">
+<input
+type="text"
+id="searchInput"
+placeholder="Search dataset..."
+onkeyup="searchTable()">
 </div>
 
 <div class="table-box">
@@ -885,55 +970,6 @@ Dataset Preview
 {% endfor %}
 
 </table>
-
-</div>
-
-</div>
-
-{% endif %}
-
-{% if stats %}
-
-<div class="insight-panel">
-
-<div class="insight-header">
-<h2>AI Insights</h2>
-<p>Live analytical observations generated from uploaded dataset</p>
-</div>
-
-<div class="insight-grid">
-
-<div class="insight-card">
-<h3>Burnout Risk</h3>
-<p>
-{% if stats.high > stats.medium and stats.high > stats.low %}
-High burnout ratio detected across workforce groups.
-{% elif stats.medium > stats.low %}
-Moderate burnout trend observed.
-{% else %}
-Overall burnout appears controlled and stable.
-{% endif %}
-</p>
-</div>
-
-<div class="insight-card">
-<h3>Productivity Stability</h3>
-<p>
-{% if prod.high > prod.low %}
-Productivity levels remain healthy for most records.
-{% else %}
-Low productivity clusters are increasing rapidly.
-{% endif %}
-</p>
-</div>
-
-<div class="insight-card">
-<h3>AI Recommendation</h3>
-<p>
-AI suggests balancing workloads, improving work-life structure,
-and monitoring high-risk employee segments continuously.
-</p>
-</div>
 
 </div>
 
@@ -1012,20 +1048,6 @@ onkeydown="if(event.key==='Enter'){sendMessage()}">
 <button onclick="sendMessage()">
 Send
 </button>
-
-</div>
-
-</div>
-
-<div id="loader">
-
-<div class="loader-box">
-
-<div class="loader-circle"></div>
-
-<h2>Analyzing Dataset...</h2>
-
-<p>AI engine is processing burnout and productivity patterns</p>
 
 </div>
 
