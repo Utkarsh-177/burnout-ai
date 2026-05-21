@@ -181,6 +181,37 @@ margin-bottom:40px;
 font-size:17px;
 }
 
+/* FLOATING BAR */
+
+.floating-bar{
+position:fixed;
+top:18px;
+left:50%;
+transform:translateX(-50%);
+display:flex;
+gap:30px;
+padding:14px 30px;
+background:rgba(15,23,42,0.75);
+backdrop-filter:blur(14px);
+border:1px solid #1e293b;
+border-radius:20px;
+z-index:999;
+box-shadow:0 10px 30px rgba(0,0,0,0.3);
+}
+
+.floating-bar div{
+text-align:center;
+}
+
+.floating-bar h3{
+font-size:22px;
+}
+
+.floating-bar p{
+color:#94a3b8;
+font-size:13px;
+}
+
 .upload{
 display:flex;
 justify-content:center;
@@ -377,6 +408,47 @@ tr:hover{
 background:#172554;
 }
 
+/* INSIGHTS */
+
+.insight-panel{
+margin-top:60px;
+}
+
+.insight-header h2{
+font-size:34px;
+margin-bottom:10px;
+}
+
+.insight-header p{
+color:#94a3b8;
+margin-bottom:25px;
+}
+
+.insight-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+gap:22px;
+}
+
+.insight-card{
+background:#0f172a;
+padding:28px;
+border-radius:22px;
+border:1px solid #1e293b;
+transition:0.35s;
+}
+
+.insight-card:hover{
+transform:translateY(-5px);
+border-color:#2563eb;
+box-shadow:0 20px 40px rgba(37,99,235,0.15);
+}
+
+.insight-card h3{
+margin-bottom:14px;
+font-size:22px;
+}
+
 .recommend-section{
 margin-top:65px;
 }
@@ -534,6 +606,38 @@ transition:0.3s;
 background:#3b82f6;
 }
 
+/* LOADER */
+
+#loader{
+position:fixed;
+inset:0;
+background:#020617;
+display:none;
+justify-content:center;
+align-items:center;
+z-index:5000;
+}
+
+.loader-box{
+text-align:center;
+}
+
+.loader-circle{
+width:90px;
+height:90px;
+border:6px solid #1e293b;
+border-top:6px solid #2563eb;
+border-radius:50%;
+margin:auto auto 25px;
+animation:spin 1s linear infinite;
+}
+
+@keyframes spin{
+100%{
+transform:rotate(360deg);
+}
+}
+
 </style>
 
 <script>
@@ -559,6 +663,10 @@ function toggleChat(){
 let c=document.getElementById("chatbox")
 
 c.style.display = c.style.display==="flex" ? "none" : "flex"
+}
+
+function showLoader(){
+document.getElementById("loader").style.display="flex"
 }
 
 function sendMessage(){
@@ -608,6 +716,27 @@ i.value=""
 
 <body>
 
+{% if stats %}
+<div class="floating-bar">
+
+<div>
+<h3>{{stats.high}}</h3>
+<p>High</p>
+</div>
+
+<div>
+<h3>{{stats.medium}}</h3>
+<p>Medium</p>
+</div>
+
+<div>
+<h3>{{stats.low}}</h3>
+<p>Low</p>
+</div>
+
+</div>
+{% endif %}
+
 <div class="container">
 
 <h1>Burnout AI</h1>
@@ -626,7 +755,10 @@ Advanced AI-powered burnout detection, productivity analytics, and intelligent w
 Drag and analyze workforce productivity & burnout datasets
 </p>
 
-<input type="file" name="file" hidden onchange="this.form.submit()">
+<input type="file"
+name="file"
+hidden
+onchange="showLoader(); this.form.submit()">
 
 </label>
 
@@ -760,6 +892,55 @@ Dataset Preview
 
 {% endif %}
 
+{% if stats %}
+
+<div class="insight-panel">
+
+<div class="insight-header">
+<h2>AI Insights</h2>
+<p>Live analytical observations generated from uploaded dataset</p>
+</div>
+
+<div class="insight-grid">
+
+<div class="insight-card">
+<h3>Burnout Risk</h3>
+<p>
+{% if stats.high > stats.medium and stats.high > stats.low %}
+High burnout ratio detected across workforce groups.
+{% elif stats.medium > stats.low %}
+Moderate burnout trend observed.
+{% else %}
+Overall burnout appears controlled and stable.
+{% endif %}
+</p>
+</div>
+
+<div class="insight-card">
+<h3>Productivity Stability</h3>
+<p>
+{% if prod.high > prod.low %}
+Productivity levels remain healthy for most records.
+{% else %}
+Low productivity clusters are increasing rapidly.
+{% endif %}
+</p>
+</div>
+
+<div class="insight-card">
+<h3>AI Recommendation</h3>
+<p>
+AI suggests balancing workloads, improving work-life structure,
+and monitoring high-risk employee segments continuously.
+</p>
+</div>
+
+</div>
+
+</div>
+
+{% endif %}
+
 {% if recommendations %}
 
 <div class="recommend-section">
@@ -831,6 +1012,20 @@ onkeydown="if(event.key==='Enter'){sendMessage()}">
 <button onclick="sendMessage()">
 Send
 </button>
+
+</div>
+
+</div>
+
+<div id="loader">
+
+<div class="loader-box">
+
+<div class="loader-circle"></div>
+
+<h2>Analyzing Dataset...</h2>
+
+<p>AI engine is processing burnout and productivity patterns</p>
 
 </div>
 
